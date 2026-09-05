@@ -29,6 +29,8 @@ function App() {
  const [memberForm, setMemberForm] = useState({ name: '', phone: '', email: '', password: '' });
   const [memberError, setMemberError] = useState('');
   const isMemberLoggedIn = !!memberToken;
+  const [myRequests, setMyRequests] = useState([]);
+  const [myRequestsLoading, setMyRequestsLoading] = useState(false);
 
   const [staffToken, setStaffToken] = useState(localStorage.getItem('staff_token') || '');
   const [staffRole, setStaffRole] = useState(localStorage.getItem('staff_role') || '');
@@ -61,6 +63,17 @@ function App() {
 
   const authHeader = { headers: { Authorization: 'Bearer ' + staffToken } };
   const memberAuthHeader = { headers: { Authorization: 'Bearer ' + memberToken } };
+  const fetchMyRequests = async () => {
+    setMyRequestsLoading(true);
+    try {
+      const res = await axios.get(API_URL + '/api/requests/mine', memberAuthHeader);
+      setMyRequests(res.data);
+    } catch (err) {
+      setMyRequests([]);
+    } finally {
+      setMyRequestsLoading(false);
+    }
+  };
 
   const can = (permKey) => isAdmin || !!(staffPermissions && staffPermissions[permKey]);
 
@@ -398,6 +411,7 @@ function App() {
                 <h2 className="text-2xl font-bold text-slate-800 mb-1">{memberName}</h2>
                 <p className="text-slate-500 text-sm mb-6 flex items-center justify-center gap-1"><Phone size={14}/> {memberPhone}</p>
                 <button onClick={() => setActiveTab('rental')} className="w-full bg-cyan-600 text-white font-bold py-3 rounded-lg hover:bg-cyan-700 transition mb-3">Kiralama Talebi Olustur</button>
+                <button onClick={() => { setActiveTab('myRequests'); fetchMyRequests(); }} className="w-full bg-blue-800 text-white font-bold py-3 rounded-lg hover:bg-blue-900 transition mb-3">Taleplerim</button>
                 <button onClick={handleMemberLogout} className="w-full flex items-center justify-center gap-2 bg-slate-100 text-slate-700 font-medium py-3 rounded-lg hover:bg-slate-200 transition"><LogOut size={16}/> Cikis Yap</button>
               </div>
             ) : (
@@ -442,7 +456,38 @@ function App() {
           </div>
         )}
 
-        {activeTab === 'rental' && (
+        {activeTab === 'myRequests' && (
+  <div className="max-w-2xl mx-auto">
+    <div className="bg-white rounded-2xl shadow-xl p-8 border border-slate-100">
+      <h2 className="text-2xl font-bold text-slate-800 mb-6">Taleplerim</h2>
+      {myRequestsLoading ? (
+        <p className="text-slate-500 text-center py-8">Yukleniyor...</p>
+      ) : myRequests.length === 0 ? (
+        <p className="text-slate-500 text-center py-8">Henuz bir talebiniz bulunmuyor.</p>
+      ) : (
+        <div className="space-y-4">
+          {myRequests.map((req) => (
+            <div key={req._id} className="border border-slate-100 rounded-xl p-4 flex items-center justify-between">
+              <div>
+                <p className="font-semibold text-slate-800">{req.item}</p>
+                <p className="text-xs text-slate-500 mt-1">{req.date} - {req.time} - {req.location}</p>
+              </div>
+              <span className={
+                "text-xs font-medium px-3 py-1 rounded-full " +
+                (req.status === 'onaylandi' ? 'bg-green-50 text-green-700' :
+                 req.status === 'reddedildi' ? 'bg-red-50 text-red-600' :
+                 'bg-amber-50 text-amber-700')
+              }>
+                {req.status === 'onaylandi' ? 'Onaylandi' : req.status === 'reddedildi' ? 'Reddedildi' : 'Bekliyor'}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  </div>
+)}
+{activeTab === 'rental' && (
           <div className="max-w-2xl mx-auto">
             {!isMemberLoggedIn ? (
               <div className="bg-white rounded-2xl shadow-xl p-10 border border-slate-100 text-center">
@@ -694,3 +739,7 @@ function App() {
   }
 
   export default App;
+
+
+
+
