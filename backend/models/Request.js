@@ -6,6 +6,7 @@ const requestSchema = new mongoose.Schema({
   time: String,
   location: String,
   customer: String,
+  email: String,
   notes: String,
   status: { type: String, default: 'Bekliyor' }
 });

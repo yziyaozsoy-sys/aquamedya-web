@@ -138,6 +138,7 @@ app.post('/api/requests', memberAuthMiddleware, async (req, res) => {
   const newRequest = await Request.create({
     item, date, time, location, notes,
     customer: `${req.member.name} (${req.member.phone})`,
+    email: req.member.email,
     status: 'Bekliyor'
   });
   res.json(newRequest);
