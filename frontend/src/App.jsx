@@ -22,7 +22,6 @@ const emptyPermissions = { equipmentView: true, equipmentAdd: false, equipmentEd
 function App() {
   const [activeTab, setActiveTab] = useState('home');
 
-  // --- ÜYE (MEMBER) STATE ---
   const [memberToken, setMemberToken] = useState(localStorage.getItem('member_token') || '');
   const [memberName, setMemberName] = useState(localStorage.getItem('member_name') || '');
   const [memberPhone, setMemberPhone] = useState(localStorage.getItem('member_phone') || '');
@@ -92,7 +91,6 @@ function App() {
   useEffect(() => { if (isStaffLoggedIn) fetchRequests(); }, [staffToken]);
   useEffect(() => { if (staffSubTab === 'management') fetchStaffList(); }, [staffSubTab]);
 
-  // --- ÜYE GİRİŞ / KAYIT ---
   const handleMemberAuth = async (e) => {
     e.preventDefault();
     setMemberError('');
@@ -467,4 +465,226 @@ function App() {
                     <div><label className="text-sm font-medium text-slate-700 flex items-center gap-1"><Calendar size={14}/> Tarih</label><input type="date" required value={rentalForm.date} onChange={(e) => setRentalForm({...rentalForm, date: e.target.value})} className="w-full mt-1 px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" /></div>
                     <div><label className="text-sm font-medium text-slate-700 flex items-center gap-1"><Clock size={14}/> Saat</label><input type="time" required value={rentalForm.time} onChange={(e) => setRentalForm({...rentalForm, time: e.target.value})} className="w-full mt-1 px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" /></div>
                   </div>
-                  <div><label className="text-sm font-medium text-slate-700 flex items-center gap-1"><MapPin size={14}/> Teslim Yeri</label><input type="text" required value={rentalForm.deliveryLocation} onChange={(e) => setRentalForm({...rentalForm, deliveryLocation: e.target.value})} className="w-full mt-1 px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Ornek: Kadikoy
+                  <div><label className="text-sm font-medium text-slate-700 flex items-center gap-1"><MapPin size={14}/> Teslim Yeri</label><input type="text" required value={rentalForm.deliveryLocation} onChange={(e) => setRentalForm({...rentalForm, deliveryLocation: e.target.value})} className="w-full mt-1 px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Ornek: Kadikoy" /></div>
+                  <div><label className="text-sm font-medium text-slate-700">Notlar (Opsiyonel)</label><textarea value={rentalForm.notes} onChange={(e) => setRentalForm({...rentalForm, notes: e.target.value})} rows={3} className="w-full mt-1 px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Ek bilgi veya ozel talepleriniz..."></textarea></div>
+                  <button type="submit" className="w-full bg-cyan-600 text-white font-bold py-3 rounded-lg hover:bg-cyan-700 transition flex items-center justify-center gap-2"><CheckCircle size={18}/> Talebi Gonder</button>
+                </form>
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'staffLogin' && (
+          <div className="max-w-md mx-auto bg-white rounded-2xl shadow-xl p-8 border border-slate-100">
+            <div className="text-center mb-6">
+              <Shield className="mx-auto text-blue-700 mb-2" size={40} />
+              <h2 className="text-2xl font-bold text-slate-800">Personel Girisi</h2>
+              <p className="text-slate-500 text-sm">Sadece yetkili personel erisebilir</p>
+            </div>
+            <form onSubmit={handleStaffLogin} className="space-y-4">
+              <div>
+                <label className="text-sm font-medium text-slate-700">Kullanici Adi</label>
+                <input type="text" required value={staffLoginForm.username} onChange={(e) => setStaffLoginForm({...staffLoginForm, username: e.target.value})} className="w-full mt-1 px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-slate-700">Sifre</label>
+                <input type="password" required value={staffLoginForm.password} onChange={(e) => setStaffLoginForm({...staffLoginForm, password: e.target.value})} className="w-full mt-1 px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
+              </div>
+              {staffError && <p className="text-red-600 text-sm">{staffError}</p>}
+              <button type="submit" className="w-full bg-blue-800 text-white font-bold py-3 rounded-lg hover:bg-blue-900 transition">Giris Yap</button>
+            </form>
+          </div>
+        )}
+
+        {activeTab === 'staff' && isStaffLoggedIn && (
+          <div>
+            <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
+              <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2"><Shield className="text-blue-700" /> Personel Paneli</h2>
+              <button onClick={handleStaffLogout} className="flex items-center gap-2 bg-slate-100 text-slate-700 font-medium px-4 py-2 rounded-lg hover:bg-slate-200 transition"><LogOut size={16}/> Cikis Yap</button>
+            </div>
+
+            <div className="flex gap-2 mb-6 bg-white p-1 rounded-lg shadow-sm border border-slate-100 w-fit flex-wrap">
+              <button onClick={() => setStaffSubTab('stock')} className={"px-4 py-2 rounded-lg text-sm font-medium transition flex items-center gap-1 " + (staffSubTab === 'stock' ? 'bg-blue-800 text-white' : 'text-slate-600 hover:bg-slate-50')}><Package size={14}/> Stok Yonetimi</button>
+              {can('requestsView') && (
+                <button onClick={() => setStaffSubTab('requests')} className={"px-4 py-2 rounded-lg text-sm font-medium transition flex items-center gap-1 " + (staffSubTab === 'requests' ? 'bg-blue-800 text-white' : 'text-slate-600 hover:bg-slate-50')}><Bell size={14}/> Kiralama Talepleri</button>
+              )}
+              {isAdmin && (
+                <button onClick={() => setStaffSubTab('management')} className={"px-4 py-2 rounded-lg text-sm font-medium transition flex items-center gap-1 " + (staffSubTab === 'management' ? 'bg-blue-800 text-white' : 'text-slate-600 hover:bg-slate-50')}><Users size={14}/> Personel Yonetimi</button>
+              )}
+            </div>
+
+            {staffSubTab === 'stock' && (
+              <div className="grid md:grid-cols-2 gap-6">
+                {can('equipmentAdd') && (
+                  <div className="bg-white rounded-xl shadow-md border border-slate-100 p-6">
+                    <h3 className="font-bold text-lg mb-4 flex items-center gap-2">{editingId ? <Edit2 size={18}/> : <Plus size={18}/>} {editingId ? 'Ekipmani Duzenle' : 'Yeni Ekipman Ekle'}</h3>
+                    <form onSubmit={handleAddOrUpdateEquip} className="space-y-3">
+                      <input type="text" required value={newEquip.name} onChange={(e) => setNewEquip({...newEquip, name: e.target.value})} placeholder="Ekipman Adi" className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
+                      <select value={newEquip.category} onChange={(e) => setNewEquip({...newEquip, category: e.target.value})} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+                        {Object.keys(categoryIcons).map((cat) => <option key={cat} value={cat}>{cat}</option>)}
+                      </select>
+                      <textarea value={newEquip.specsText} onChange={(e) => setNewEquip({...newEquip, specsText: e.target.value})} placeholder={"Ozellikler (her satira bir ozellik)"} rows={3} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"></textarea>
+                      <div className="grid grid-cols-2 gap-3">
+                        <input type="text" required value={newEquip.price} onChange={(e) => setNewEquip({...newEquip, price: e.target.value})} placeholder="Fiyat (orn: 500 TL/gun)" className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
+                        <input type="number" min="0" required value={newEquip.stock} onChange={(e) => setNewEquip({...newEquip, stock: e.target.value})} placeholder="Stok Adedi" className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
+                      </div>
+                      <input type="text" value={newEquip.videoUrl} onChange={(e) => setNewEquip({...newEquip, videoUrl: e.target.value})} placeholder="Video URL (opsiyonel)" className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
+                      <div>
+                        <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer bg-slate-50 border border-dashed border-slate-300 rounded-lg px-4 py-3 hover:bg-slate-100">
+                          <Upload size={16}/> Fotograf Yukle
+                          <input type="file" accept="image/*" onChange={handlePhotoChange} className="hidden" />
+                        </label>
+                        {newEquip.photoPreview && <img src={newEquip.photoPreview} alt="preview" className="mt-2 h-24 rounded-lg object-cover" />}
+                      </div>
+                      <div className="flex gap-2">
+                        <button type="submit" className="flex-1 bg-blue-800 text-white font-bold py-2 rounded-lg hover:bg-blue-900 transition">{editingId ? 'Guncelle' : 'Ekle'}</button>
+                        {editingId && <button type="button" onClick={cancelEdit} className="px-4 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition"><X size={18}/></button>}
+                      </div>
+                    </form>
+                  </div>
+                )}
+                <div className="bg-white rounded-xl shadow-md border border-slate-100 p-6">
+                                      <h3 className="font-bold text-lg mb-4">Mevcut Ekipmanlar</h3>
+                    <div className="space-y-3 max-h-96 overflow-y-auto">
+                      {equipmentCatalog.map((eq) => (
+                        <div key={eq.id} className="flex items-center justify-between border border-slate-100 rounded-lg p-3">
+                          <div className="flex items-center gap-3">
+                            {eq.photo ? (
+                              <img src={API_URL + eq.photo} alt={eq.name} className="w-12 h-12 rounded-lg object-cover" />
+                            ) : (
+                              <div className="w-12 h-12 rounded-lg bg-blue-50 flex items-center justify-center">
+                                {React.createElement(categoryIcons[eq.category] || Package, { size: 20, className: "text-blue-600" })}
+                              </div>
+                            )}
+                            <div>
+                              <p className="font-medium text-slate-800 text-sm">{eq.name}</p>
+                              <p className="text-xs text-slate-500">{eq.category} · Stok: {eq.stock} · {eq.price}</p>
+                            </div>
+                          </div>
+                          <div className="flex gap-2">
+                            {can('equipmentEdit') && (
+                              <button onClick={() => handleEditEquip(eq)} className="p-2 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition"><Edit2 size={14} /></button>
+                            )}
+                            {can('equipmentDelete') && (
+                              <button onClick={() => handleDeleteEquip(eq.id)} className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition"><Trash2 size={14} /></button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                      {equipmentCatalog.length === 0 && (
+                        <p className="text-slate-400 text-sm text-center py-8">Henuz ekipman eklenmemis.</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {staffSubTab === 'requests' && can('requestsView') && (
+                <div className="bg-white rounded-xl shadow-md border border-slate-100 p-6">
+                  <h3 className="font-bold text-lg mb-4 flex items-center gap-2"><Bell size={18} /> Kiralama Talepleri</h3>
+                  <div className="space-y-3">
+                    {requests.map((req) => (
+                      <div key={req.id} className="border border-slate-100 rounded-lg p-4 flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                          <p className="font-medium text-slate-800">{req.item}</p>
+                          <p className="text-xs text-slate-500 flex items-center gap-3 mt-1">
+                            <span className="flex items-center gap-1"><Calendar size={12} /> {req.date}</span>
+                            <span className="flex items-center gap-1"><Clock size={12} /> {req.time}</span>
+                            <span className="flex items-center gap-1"><MapPin size={12} /> {req.location}</span>
+                          </p>
+                          {req.notes && <p className="text-xs text-slate-400 mt-1">Not: {req.notes}</p>}
+                          <p className="text-xs text-blue-600 mt-1 flex items-center gap-1"><User size={12} /> {req.memberName || req.memberPhone}</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className={
+                            "text-xs font-medium px-3 py-1 rounded-full " +
+                            (req.status === 'onaylandi' ? 'bg-green-50 text-green-700' :
+                             req.status === 'reddedildi' ? 'bg-red-50 text-red-600' :
+                             'bg-amber-50 text-amber-700')
+                          }>
+                            {req.status === 'onaylandi' ? 'Onaylandi' : req.status === 'reddedildi' ? 'Reddedildi' : 'Beklemede'}
+                          </span>
+                          {can('requestsManage') && req.status === 'beklemede' && (
+                            <>
+                              <button onClick={() => updateStatus(req.id, 'onaylandi')} className="p-2 bg-green-50 text-green-700 rounded-lg hover:bg-green-100 transition"><CheckCircle size={14} /></button>
+                              <button onClick={() => updateStatus(req.id, 'reddedildi')} className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition"><X size={14} /></button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                    {requests.length === 0 && (
+                      <p className="text-slate-400 text-sm text-center py-8">Henuz talep bulunmuyor.</p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {staffSubTab === 'management' && isAdmin && (
+                <div className="grid md:grid-cols-2 gap-6">
+                  <div className="bg-white rounded-xl shadow-md border border-slate-100 p-6">
+                    <h3 className="font-bold text-lg mb-4 flex items-center gap-2">{editingStaffId ? <Edit2 size={18}/> : <Plus size={18}/>} {editingStaffId ? 'Personeli Duzenle' : 'Yeni Personel Ekle'}</h3>
+                    <form onSubmit={handleAddOrUpdateStaff} className="space-y-3">
+                      <input type="text" required disabled={!!editingStaffId} value={newStaff.username} onChange={(e) => setNewStaff({...newStaff, username: e.target.value})} placeholder="Kullanici Adi" className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-slate-100" />
+                      <input type="text" value={newStaff.displayName} onChange={(e) => setNewStaff({...newStaff, displayName: e.target.value})} placeholder="Gorunen Ad" className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
+                      <input type="password" required={!editingStaffId} value={newStaff.password} onChange={(e) => setNewStaff({...newStaff, password: e.target.value})} placeholder={editingStaffId ? "Yeni Sifre (degistirmek icin doldurun)" : "Sifre"} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
+
+                      <div className="border border-slate-200 rounded-lg p-3">
+                        <p className="text-xs font-bold text-slate-500 mb-2">YETKILER</p>
+                        <div className="space-y-2">
+                          {Object.keys(permissionLabels).map((key) => (
+                            <label key={key} className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
+                              <input type="checkbox" checked={!!newStaff.permissions[key]} onChange={() => togglePermission(key)} className="w-4 h-4" />
+                              {permissionLabels[key]}
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+
+                      {staffFormError && <p className="text-red-600 text-sm">{staffFormError}</p>}
+                      <div className="flex gap-2">
+                        <button type="submit" className="flex-1 bg-blue-800 text-white font-bold py-2 rounded-lg hover:bg-blue-900 transition">{editingStaffId ? 'Guncelle' : 'Ekle'}</button>
+                        {editingStaffId && <button type="button" onClick={cancelStaffEdit} className="px-4 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition"><X size={18}/></button>}
+                      </div>
+                    </form>
+                  </div>
+
+                  <div className="bg-white rounded-xl shadow-md border border-slate-100 p-6">
+                    <h3 className="font-bold text-lg mb-4 flex items-center gap-2"><Users size={18} /> Personel Listesi</h3>
+                    <div className="space-y-3 max-h-96 overflow-y-auto">
+                      {staffList.map((s) => (
+                        <div key={s.id} className="flex items-center justify-between border border-slate-100 rounded-lg p-3">
+                          <div>
+                            <p className="font-medium text-slate-800 text-sm flex items-center gap-2">
+                              {s.displayName || s.username}
+                              {s.role === 'admin' && <span className="text-xs bg-purple-50 text-purple-700 px-2 py-0.5 rounded-full">Admin</span>}
+                            </p>
+                            <p className="text-xs text-slate-500">@{s.username}</p>
+                          </div>
+                          {s.role !== 'admin' && (
+                            <div className="flex gap-2">
+                              <button onClick={() => handleEditStaff(s)} className="p-2 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition"><Edit2 size={14} /></button>
+                              <button onClick={() => handleDeleteStaff(s.id)} className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition"><Trash2 size={14} /></button>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                      {staffList.length === 0 && (
+                        <p className="text-slate-400 text-sm text-center py-8">Henuz personel bulunmuyor.</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </main>
+
+        <footer className="bg-slate-900 text-slate-400 text-center py-6 text-sm mt-12">
+          © 2026 Aqua Medya. Tum haklari saklidir.
+        </footer>
+      </div>
+    );
+  }
+
+  export default App;
