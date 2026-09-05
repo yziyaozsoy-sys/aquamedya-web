@@ -190,7 +190,7 @@ function App() {
         notes: rentalForm.notes
       }, memberAuthHeader);
       setShowSuccess(true);
-      setRentalForm({ equipment: '', date: '', time: '', deliveryLocation: '', notes: '' });
+      setRentalForm({ equipment: [], date: '', time: '', deliveryLocation: '', notes: '' });
       setTimeout(() => setShowSuccess(false), 4000);
     } catch (err) {
       if (err.response && err.response.status === 401) {
@@ -292,7 +292,7 @@ const downloadRequestAsWord = (req) => {
     if (!can('equipmentEdit')) return;
     setEditingId(eq.id);
     setNewEquip({
-      name: eq.name, category: eq.category, specsText: eq.specs.join('\n'),
+      name: eq.name, category: eq.category, specsText: (eq.specs || []).join('\n'),
       price: eq.price, stock: eq.stock, photoFile: null,
       photoPreview: eq.photo ? (API_URL + eq.photo) : null, videoUrl: eq.videoUrl || ''
     });
@@ -667,9 +667,9 @@ const downloadRequestAsWord = (req) => {
                               </div>
                             )}
                             <div>
-                              <p className="font-medium text-slate-800">{Array.isArray(req.item) ? req.item.join(', ') : req.item}</p>
-                              <p className="text-xs text-slate-500">{eq.category} · Stok: {eq.stock} · {eq.price}</p>
-                            </div>
+  <p className="font-medium text-slate-800">{eq.name}</p>
+  <p className="text-xs text-slate-500">{eq.category} · Stok: {eq.stock} · {eq.price}</p>
+</div>
                           </div>
                           <div className="flex gap-2">
                             {can('equipmentEdit') && (
@@ -806,7 +806,3 @@ const downloadRequestAsWord = (req) => {
   }
 
   export default App;
-
-
-
-
