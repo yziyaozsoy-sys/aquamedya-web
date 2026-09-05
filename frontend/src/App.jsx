@@ -100,7 +100,14 @@ function App() {
   };
 
   useEffect(() => { fetchEquipment(); }, []);
-  useEffect(() => { if (isStaffLoggedIn) fetchRequests(); }, [staffToken]);
+ useEffect(() => {
+  if (!isStaffLoggedIn) return;
+  fetchRequests();
+  const interval = setInterval(() => {
+    fetchRequests();
+  }, 8000);
+  return () => clearInterval(interval);
+}, [staffToken]);
   useEffect(() => { if (staffSubTab === 'management') fetchStaffList(); }, [staffSubTab]);
 
   const handleMemberAuth = async (e) => {
