@@ -599,7 +599,7 @@ function App() {
                             <span className="flex items-center gap-1"><MapPin size={12} /> {req.location}</span>
                           </p>
                           {req.notes && <p className="text-xs text-slate-400 mt-1">Not: {req.notes}</p>}
-                          <p className="text-xs text-blue-600 mt-1 flex items-center gap-1"><User size={12} /> {req.memberName || req.memberPhone}</p>
+                         <p className="text-xs text-blue-600 mt-1 flex items-center gap-1"><User size={12} /> {req.customer}</p>
                         </div>
                         <div className="flex items-center gap-2">
                           <span className={
@@ -608,9 +608,9 @@ function App() {
                              req.status === 'reddedildi' ? 'bg-red-50 text-red-600' :
                              'bg-amber-50 text-amber-700')
                           }>
-                            {req.status === 'onaylandi' ? 'Onaylandi' : req.status === 'reddedildi' ? 'Reddedildi' : 'Beklemede'}
+                            {req.status === 'onaylandi' ? 'Onaylandi' : req.status === 'reddedildi' ? 'Reddedildi' : 'Bekliyor'}
                           </span>
-                          {can('requestsManage') && req.status === 'beklemede' && (
+                          {can('requestsManage') && req.status === 'Bekliyor' && (
                             <>
                               <button onClick={() => updateStatus(req.id, 'onaylandi')} className="p-2 bg-green-50 text-green-700 rounded-lg hover:bg-green-100 transition"><CheckCircle size={14} /></button>
                               <button onClick={() => updateStatus(req.id, 'reddedildi')} className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition"><X size={14} /></button>
