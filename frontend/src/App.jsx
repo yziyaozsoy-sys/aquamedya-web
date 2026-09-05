@@ -87,7 +87,7 @@ function App() {
     if (!staffToken || !can('requestsView')) return;
     try {
       const res = await axios.get(API_URL + '/api/requests', authHeader);
-      setRequests(res.data);
+  setRequests([...res.data].sort((a, b) => (b._id > a._id ? 1 : -1)));
     } catch (e) { console.error('Talepler alinamadi', e); }
   };
 
