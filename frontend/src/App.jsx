@@ -44,7 +44,7 @@ function App() {
   const [requests, setRequests] = useState([]);
   const [equipmentCatalog, setEquipmentCatalog] = useState([]);
 
-  const [rentalForm, setRentalForm] = useState({ equipment: '', date: '', time: '', deliveryLocation: '', notes: '' });
+ const [rentalForm, setRentalForm] = useState({ equipment: [], date: '', time: '', deliveryLocation: '', notes: '' });
   const [showSuccess, setShowSuccess] = useState(false);
 
   const emptyNewEquip = { name: '', category: 'Kamera', specsText: '', price: '', stock: 1, photoFile: null, photoPreview: null, videoUrl: '' };
@@ -112,6 +112,7 @@ function App() {
 
   const handleMemberAuth = async (e) => {
     e.preventDefault();
+    if (rentalForm.equipment.length === 0) { alert('Lutfen en az bir ekipman secin.'); return; }
     setMemberError('');
     try {
       const endpoint = memberMode === 'login' ? '/api/member/login' : '/api/member/register';
@@ -217,7 +218,7 @@ const downloadRequestAsWord = (req) => {
       <h2 style="text-align:center; color:#1e3a8a;">Aqua Medya - Ekipman Kiralama Talebi</h2>
       <hr/>
       <table style="width:100%; border-collapse: collapse; margin-top:20px;">
-        <tr><td style="padding:8px; font-weight:bold; width:180px;">Ekipman:</td><td style="padding:8px;">${req.item}</td></tr>
+       <tr><td style="padding:8px; font-weight:bold; width:180px;">Ekipman:</td><td style="padding:8px;">${Array.isArray(req.item) ? req.item.join(', ') : req.item}</td></tr>
         <tr><td style="padding:8px; font-weight:bold;">Tarih:</td><td style="padding:8px;">${req.date}</td></tr>
         <tr><td style="padding:8px; font-weight:bold;">Saat:</td><td style="padding:8px;">${req.time}</td></tr>
         <tr><td style="padding:8px; font-weight:bold;">Teslim Yeri:</td><td style="padding:8px;">${req.location}</td></tr>
@@ -234,17 +235,21 @@ const downloadRequestAsWord = (req) => {
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
-  link.download = `Talep_${req.item}_${req.date}.doc`;
+  link.download = `Talep_${Array.isArray(req.item) ? req.item[0] : req.item}_${req.date}.doc`;
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
 };
-  const handleRentClick = (equipmentName) => {
-    setRentalForm({ ...rentalForm, equipment: equipmentName });
-    setActiveTab('rental');
-  };
-
+ const handleRentClick = (equipmentName) => {
+    setRentalForm((prev) => {
+      const exists = prev.equipment.includes(equipmentName);
+      const updated = exists
+        ? prev.equipment.filter((e) => e !== equipmentName)
+        : [...prev.equipment, equipmentName];
+      return { ...prev, equipment: updated };
+    });
+};
   const handlePhotoChange = (e) => {
     const file = e.target.files[0];
     if (file) {
@@ -403,7 +408,12 @@ const downloadRequestAsWord = (req) => {
           <div>
             <div className="mb-6">
               <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2"><Package className="text-blue-700" /> Ekipman Katalogu</h2>
-              <p className="text-slate-500 text-sm mt-1">Produksiyonunuza uygun ekipmani secin ve hemen kiralama talebi olusturun.</p>
+             <p className="text-slate-500 text-sm mt-1">Produksiyonunuza uygun ekipmani secin ve hemen kiralama talebi olusturun.</p>
+{rentalForm.equipment.length > 0 && (
+  <button onClick={() => setActiveTab('rental')} className="mt-3 bg-cyan-600 text-white font-bold px-5 py-2 rounded-lg hover:bg-cyan-700 transition flex items-center gap-2">
+    <CheckCircle size={16}/> {rentalForm.equipment.length} Ekipman Seçildi — Talep Formuna Geç
+  </button>
+)}
             </div>
             <div className="grid md:grid-cols-3 gap-5">
               {equipmentCatalog.map((eq) => {
@@ -427,7 +437,7 @@ const downloadRequestAsWord = (req) => {
                       </ul>
                       <div className="flex items-center justify-between">
                         <span className="font-bold text-blue-800">{eq.price}</span>
-                        <button onClick={() => handleRentClick(eq.name)} disabled={eq.stock === 0} className={"text-sm font-medium px-4 py-2 rounded-lg transition " + (eq.stock > 0 ? 'bg-cyan-600 text-white hover:bg-cyan-700' : 'bg-slate-300 text-slate-500 cursor-not-allowed')}>Hemen Kirala</button>
+                        <button onClick={() => handleRentClick(eq.name)} disabled={eq.stock === 0} className={"text-sm font-medium px-4 py-2 rounded-lg transition " + (eq.stock === 0 ? 'bg-slate-300 text-slate-500 cursor-not-allowed' : (rentalForm.equipment.includes(eq.name) ? 'bg-green-600 text-white' : 'bg-cyan-600 text-white hover:bg-cyan-700'))}>{rentalForm.equipment.includes(eq.name) ? '✓ Seçildi' : 'Sepete Ekle'}</button>
                       </div>
                     </div>
                   </div>
@@ -505,7 +515,7 @@ const downloadRequestAsWord = (req) => {
           {myRequests.map((req) => (
             <div key={req._id} className="border border-slate-100 rounded-xl p-4 flex items-center justify-between">
               <div>
-                <p className="font-semibold text-slate-800">{req.item}</p>
+                <p className="font-semibold text-slate-800">{Array.isArray(req.item) ? req.item.join(', ') : req.item}</p>
                 <p className="text-xs text-slate-500 mt-1">{req.date} - {req.time} - {req.location}</p>
               </div>
               <span className={
@@ -537,15 +547,28 @@ const downloadRequestAsWord = (req) => {
             ) : (
               <div className="bg-white rounded-2xl shadow-xl p-8 border border-slate-100">
                 <div className="flex items-center justify-between mb-6">
-                  <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2"><Package className="text-blue-700" /> Ekipman Kiralama Talebi</h2>
+                 <div className="flex items-center gap-3">
+                    <img src="/logo.png" alt="Aqua Medya Logo" className="h-10 w-10 object-contain" />
+                    <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2"><Package className="text-blue-700" /> Ekipman Kiralama Talebi</h2>
+                  </div>
                   <span className="text-xs bg-green-50 text-green-700 px-3 py-1 rounded-full font-medium flex items-center gap-1"><User size={12}/> {memberName}</span>
                 </div>
                 {showSuccess && (<div className="bg-green-50 border border-green-300 text-green-700 rounded-lg p-4 mb-4 flex items-center gap-2"><CheckCircle size={20} /> Talebiniz alindi! Personelimiz en kisa surede sizinle iletisime gececek.</div>)}
                 <form onSubmit={handleRentalSubmit} className="space-y-4">
-                  <div><label className="text-sm font-medium text-slate-700">Ekipman Secimi</label>
-                    <select required value={rentalForm.equipment} onChange={(e) => setRentalForm({...rentalForm, equipment: e.target.value})} className="w-full mt-1 px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
-                      <option value="">-- Ekipman Secin --</option>
-                      {equipmentList.map((eq, i) => <option key={i} value={eq}>{eq}</option>)}
+                  <div>
+                    <label className="text-sm font-medium text-slate-700">Ekipman Secimi (Birden Fazla Secilebilir)</label>
+                    <div className="flex flex-wrap gap-2 mt-2 mb-2">
+                      {rentalForm.equipment.map((eq, i) => (
+                        <span key={i} className="flex items-center gap-1 bg-cyan-50 text-cyan-800 text-sm font-medium px-3 py-1 rounded-full border border-cyan-200">
+                          {eq}
+                          <button type="button" onClick={() => setRentalForm({...rentalForm, equipment: rentalForm.equipment.filter((x) => x !== eq)})} className="text-cyan-600 hover:text-red-600 font-bold">×</button>
+                        </span>
+                      ))}
+                      {rentalForm.equipment.length === 0 && (<span className="text-sm text-slate-400">Henuz ekipman secilmedi</span>)}
+                    </div>
+                    <select value="" onChange={(e) => { if (e.target.value && !rentalForm.equipment.includes(e.target.value)) { setRentalForm({...rentalForm, equipment: [...rentalForm.equipment, e.target.value]}); } }} className="w-full mt-1 px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+                      <option value="">-- Ekipman Ekle --</option>
+                      {equipmentList.filter((eq) => !rentalForm.equipment.includes(eq)).map((eq, i) => <option key={i} value={eq}>{eq}</option>)}
                     </select>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
@@ -644,7 +667,7 @@ const downloadRequestAsWord = (req) => {
                               </div>
                             )}
                             <div>
-                              <p className="font-medium text-slate-800 text-sm">{eq.name}</p>
+                              <p className="font-medium text-slate-800">{Array.isArray(req.item) ? req.item.join(', ') : req.item}</p>
                               <p className="text-xs text-slate-500">{eq.category} · Stok: {eq.stock} · {eq.price}</p>
                             </div>
                           </div>
