@@ -143,6 +143,14 @@ app.post('/api/requests', memberAuthMiddleware, async (req, res) => {
   });
   res.json(newRequest);
 });
+app.get('/api/requests/mine', memberAuthMiddleware, async (req, res) => {
+  try {
+    const myRequests = await Request.find({ email: req.member.email }).sort({ _id: -1 });
+    res.json(myRequests);
+  } catch (err) {
+    res.status(500).json({ error: 'Talepler alınamadı' });
+  }
+});
 function memberAuthMiddleware(req, res, next) {
   const token = req.headers['authorization']?.split(' ')[1];
   if (!token) return res.status(401).json({ error: 'Talep göndermek için üye girişi yapmalısınız' });
