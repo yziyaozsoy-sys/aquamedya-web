@@ -155,22 +155,27 @@ function memberAuthMiddleware(req, res, next) {
   }
 }
 // --- ÜYELİK ROUTE'LARI ---
-
 app.post('/api/member/register', async (req, res) => {
-  const { name, phone, password } = req.body;
-  if (!name || !phone || !password) {
-    return res.status(400).json({ error: 'Ad, telefon ve şifre alanları zorunludur' });
+  const { name, phone, email, password } = req.body;
+  if (!name || !phone || !email || !password) {
+    return res.status(400).json({ error: 'Ad, telefon, e-posta ve şifre alanları zorunludur' });
   }
-  try {
-    const exists = await Member.findOne({ phone });
-    if (exists) return res.status(400).json({ error: 'Bu telefon numarası zaten kayıtlı' });
 
-    const newMember = await Member.create({ name, phone, password });
+  const emailRegex = /^\S+@\S+\.\S+$/;
+  if (!emailRegex.test(email)) {
+    return res.status(400).json({ error: 'Geçerli bir e-posta adresi giriniz' });
+  }
+
+  try {
+    const exists = await Member.findOne({ $or: [{ phone }, { email: email.toLowerCase() }] });
+    if (exists) return res.status(400).json({ error: 'Bu telefon numarası veya e-posta zaten kayıtlı' });
+
+    const newMember = await Member.create({ name, phone, email: email.toLowerCase(), password });
     const token = jwt.sign(
-      { id: newMember._id, phone: newMember.phone, name: newMember.name, type: 'member' },
+      { id: newMember._id, phone: newMember.phone, name: newMember.name, email: newMember.email, type: 'member' },
       JWT_SECRET, { expiresIn: '30d' }
     );
-    res.json({ token, name: newMember.name, phone: newMember.phone });
+    res.json({ token, name: newMember.name, phone: newMember.phone, email: newMember.email });
   } catch (err) {
     res.status(500).json({ error: 'Kayıt işlemi başarısız oldu' });
   }
@@ -183,14 +188,15 @@ app.post('/api/member/login', async (req, res) => {
     if (!member) return res.status(401).json({ error: 'Telefon numarası veya şifre hatalı' });
 
     const token = jwt.sign(
-      { id: member._id, phone: member.phone, name: member.name, type: 'member' },
+      { id: member._id, phone: member.phone, name: member.name, email: member.email, type: 'member' },
       JWT_SECRET, { expiresIn: '30d' }
     );
-    res.json({ token, name: member.name, phone: member.phone });
+    res.json({ token, name: member.name, phone: member.phone, email: member.email });
   } catch (err) {
     res.status(500).json({ error: 'Sunucu hatası' });
   }
 });
+
 app.get('/api/requests', authMiddleware, requirePermission('requestsView'), async (req, res) => {
   const list = await Request.find();
   res.json(list);
