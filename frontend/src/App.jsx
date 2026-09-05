@@ -612,8 +612,8 @@ function App() {
                           </span>
                           {can('requestsManage') && req.status === 'Bekliyor' && (
                             <>
-                              <button onClick={() => updateStatus(req.id, 'onaylandi')} className="p-2 bg-green-50 text-green-700 rounded-lg hover:bg-green-100 transition"><CheckCircle size={14} /></button>
-                              <button onClick={() => updateStatus(req.id, 'reddedildi')} className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition"><X size={14} /></button>
+                              <button onClick={() => updateStatus(req._id, 'onaylandi')} className="p-2 bg-green-50 text-green-700 rounded-lg hover:bg-green-100 transition"><CheckCircle size={14} /></button>
+                              <button onClick={() => updateStatus(req._id, 'reddedildi')} className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition"><X size={14} /></button>
                             </>
                           )}
                         </div>
