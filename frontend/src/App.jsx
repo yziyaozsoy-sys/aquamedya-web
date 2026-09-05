@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Camera, Calendar, MapPin, Clock, User, Lock, Package, Bell, CheckCircle, Phone, Mail, Building2, Video, Mic, Lightbulb, Move3d, ScreenShare, Star, Upload, Image as ImageIcon, Trash2, Edit2, Plus, X, Shield, Users, LogOut, AlertTriangle } from 'lucide-react';
-
+import { Camera, Calendar, MapPin, Clock, User, Lock, Package, Bell, CheckCircle, Phone, Mail, Building2, Video, Mic, Lightbulb, Move3d, ScreenShare, Star, Upload, Image as ImageIcon, Trash2, Edit2, Plus, X, Shield, Users, LogOut, AlertTriangle, FileText } from 'lucide-react';
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
 const categoryIcons = {
@@ -203,7 +202,37 @@ function App() {
       fetchRequests();
     } catch (e) { console.error(e); }
   };
-
+const downloadRequestAsWord = (req) => {
+  const content = `
+    <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+    <head><meta charset='utf-8'><title>Kiralama Talebi</title></head>
+    <body style="font-family: Arial, sans-serif; padding: 30px;">
+      <h2 style="text-align:center; color:#1e3a8a;">Aqua Medya - Ekipman Kiralama Talebi</h2>
+      <hr/>
+      <table style="width:100%; border-collapse: collapse; margin-top:20px;">
+        <tr><td style="padding:8px; font-weight:bold; width:180px;">Ekipman:</td><td style="padding:8px;">${req.item}</td></tr>
+        <tr><td style="padding:8px; font-weight:bold;">Tarih:</td><td style="padding:8px;">${req.date}</td></tr>
+        <tr><td style="padding:8px; font-weight:bold;">Saat:</td><td style="padding:8px;">${req.time}</td></tr>
+        <tr><td style="padding:8px; font-weight:bold;">Teslim Yeri:</td><td style="padding:8px;">${req.location}</td></tr>
+        <tr><td style="padding:8px; font-weight:bold;">Musteri:</td><td style="padding:8px;">${req.customer}</td></tr>
+        <tr><td style="padding:8px; font-weight:bold;">E-posta:</td><td style="padding:8px;">${req.email || '-'}</td></tr>
+        <tr><td style="padding:8px; font-weight:bold;">Notlar:</td><td style="padding:8px;">${req.notes || '-'}</td></tr>
+        <tr><td style="padding:8px; font-weight:bold;">Durum:</td><td style="padding:8px;">${req.status}</td></tr>
+      </table>
+      <br/><br/>
+      <p>Onaylayan Yetkili Imza: ______________________</p>
+    </body>
+    </html>`;
+  const blob = new Blob(['\ufeff', content], { type: 'application/msword' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `Talep_${req.item}_${req.date}.doc`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+};
   const handleRentClick = (equipmentName) => {
     setRentalForm({ ...rentalForm, equipment: equipmentName });
     setActiveTab('rental');
@@ -634,7 +663,7 @@ function App() {
                 <div className="bg-white rounded-xl shadow-md border border-slate-100 p-6">
                   <h3 className="font-bold text-lg mb-4 flex items-center gap-2"><Bell size={18} /> Kiralama Talepleri</h3>
                   <div className="space-y-3">
-                    {requests.map((req) => (
+                                      {requests.map((req) => (
                       <div key={req.id} className="border border-slate-100 rounded-lg p-4 flex flex-wrap items-center justify-between gap-3">
                         <div>
                           <p className="font-medium text-slate-800">{req.item}</p>
@@ -644,7 +673,8 @@ function App() {
                             <span className="flex items-center gap-1"><MapPin size={12} /> {req.location}</span>
                           </p>
                           {req.notes && <p className="text-xs text-slate-400 mt-1">Not: {req.notes}</p>}
-                         <p className="text-xs text-blue-600 mt-1 flex items-center gap-1"><User size={12} /> {req.customer}</p>
+                          <p className="text-xs text-blue-600 mt-1 flex items-center gap-1"><User size={12} /> {req.customer}</p>
+                          {req.email && <p className="text-xs text-slate-500 mt-1">✉️ {req.email}</p>}
                         </div>
                         <div className="flex items-center gap-2">
                           <span className={
@@ -655,6 +685,9 @@ function App() {
                           }>
                             {req.status === 'onaylandi' ? 'Onaylandi' : req.status === 'reddedildi' ? 'Reddedildi' : 'Bekliyor'}
                           </span>
+                          <button onClick={() => downloadRequestAsWord(req)} className="p-2 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition" title="Word olarak indir">
+                            <FileText size={14} />
+                          </button>
                           {can('requestsManage') && req.status === 'Bekliyor' && (
                             <>
                               <button onClick={() => updateStatus(req._id, 'onaylandi')} className="p-2 bg-green-50 text-green-700 rounded-lg hover:bg-green-100 transition"><CheckCircle size={14} /></button>
@@ -664,6 +697,10 @@ function App() {
                         </div>
                       </div>
                     ))}
+                    {requests.length === 0 && (
+                      <p className="text-slate-400 text-sm text-center py-8">Henuz talep bulunmuyor.</p>
+                    )}
+
                     {requests.length === 0 && (
                       <p className="text-slate-400 text-sm text-center py-8">Henuz talep bulunmuyor.</p>
                     )}
