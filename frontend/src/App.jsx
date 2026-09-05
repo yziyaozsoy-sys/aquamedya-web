@@ -696,7 +696,7 @@ const downloadRequestAsWord = (req) => {
                                       {requests.map((req) => (
                       <div key={req.id} className="border border-slate-100 rounded-lg p-4 flex flex-wrap items-center justify-between gap-3">
                         <div>
-                          <p className="font-medium text-slate-800">{req.item}</p>
+                         <p className="font-medium text-slate-800">{Array.isArray(req.item) ? req.item.join(', ') : req.item}</p>
                           <p className="text-xs text-slate-500 flex items-center gap-3 mt-1">
                             <span className="flex items-center gap-1"><Calendar size={12} /> {req.date}</span>
                             <span className="flex items-center gap-1"><Clock size={12} /> {req.time}</span>
