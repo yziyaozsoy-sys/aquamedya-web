@@ -9,6 +9,6 @@ const requestSchema = new mongoose.Schema({
   email: String,
   notes: String,
   status: { type: String, default: 'Bekliyor' }
-});
+  }, { timestamps: true });
 
 module.exports = mongoose.model('Request', requestSchema);
