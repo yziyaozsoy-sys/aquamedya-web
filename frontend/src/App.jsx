@@ -354,7 +354,7 @@ const downloadRequestAsWord = (req) => {
       <header className="bg-gradient-to-r from-blue-900 to-cyan-700 text-white shadow-lg">
         <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between flex-wrap gap-4">
           <div className="flex items-center gap-3">
-            <div className="bg-white rounded-full p-2"><Camera className="text-blue-900" size={28} /></div>
+            <img src="/logo.png" alt="Aqua Medya Logo" className="h-12 w-12 object-contain bg-white rounded-full p-1" />
             <div>
               <h1 className="text-2xl font-bold">Aqua Medya</h1>
               <p className="text-xs text-cyan-100">Produksiyon Ekipman Kiralama</p>
@@ -453,7 +453,7 @@ const downloadRequestAsWord = (req) => {
             ) : (
               <>
                 <div className="text-center mb-6">
-                  <Lock className="mx-auto text-blue-700 mb-2" size={40} />
+                  <img src="/logo.png" alt="Aqua Medya Logo" className="mx-auto h-16 w-16 object-contain mb-2" />
                   <h2 className="text-2xl font-bold text-slate-800">{memberMode === 'login' ? 'Uye Girisi' : 'Uye Kaydi'}</h2>
                   <p className="text-slate-500 text-sm">Kiralama talebi gonderebilmek icin uye olmalisiniz</p>
                 </div>
