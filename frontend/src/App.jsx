@@ -26,7 +26,7 @@ function App() {
   const [memberName, setMemberName] = useState(localStorage.getItem('member_name') || '');
   const [memberPhone, setMemberPhone] = useState(localStorage.getItem('member_phone') || '');
   const [memberMode, setMemberMode] = useState('login');
-  const [memberForm, setMemberForm] = useState({ name: '', phone: '', password: '' });
+ const [memberForm, setMemberForm] = useState({ name: '', phone: '', email: '', password: '' });
   const [memberError, setMemberError] = useState('');
   const isMemberLoggedIn = !!memberToken;
 
@@ -97,8 +97,8 @@ function App() {
     try {
       const endpoint = memberMode === 'login' ? '/api/member/login' : '/api/member/register';
       const payload = memberMode === 'login'
-        ? { phone: memberForm.phone, password: memberForm.password }
-        : { name: memberForm.name, phone: memberForm.phone, password: memberForm.password };
+           ? { phone: memberForm.phone, password: memberForm.password }
+        : { name: memberForm.name, phone: memberForm.phone, email: memberForm.email, password: memberForm.password };
       const res = await axios.post(API_URL + endpoint, payload);
       localStorage.setItem('member_token', res.data.token);
       localStorage.setItem('member_name', res.data.name);
@@ -106,7 +106,7 @@ function App() {
       setMemberToken(res.data.token);
       setMemberName(res.data.name);
       setMemberPhone(res.data.phone);
-      setMemberForm({ name: '', phone: '', password: '' });
+         setMemberForm({ name: '', phone: '', email: '', password: '' });
       setActiveTab('rental');
     } catch (err) {
       setMemberError((err.response && err.response.data && err.response.data.error) || 'Islem basarisiz oldu.');
@@ -412,25 +412,31 @@ function App() {
                   <button onClick={() => { setMemberMode('register'); setMemberError(''); }} className={"flex-1 py-2 rounded-lg text-sm font-medium transition " + (memberMode === 'register' ? 'bg-white text-blue-800 shadow' : 'text-slate-500')}>Uye Ol</button>
                 </div>
                 <form onSubmit={handleMemberAuth} className="space-y-4">
-                  {memberMode === 'register' && (
-                    <div>
-                      <label className="text-sm font-medium text-slate-700">Ad Soyad</label>
-                      <input type="text" required value={memberForm.name} onChange={(e) => setMemberForm({...memberForm, name: e.target.value})} className="w-full mt-1 px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Adiniz Soyadiniz" />
-                    </div>
-                  )}
-                  <div>
-                    <label className="text-sm font-medium text-slate-700 flex items-center gap-1"><Phone size={14}/> Telefon Numarasi</label>
-                    <input type="tel" required value={memberForm.phone} onChange={(e) => setMemberForm({...memberForm, phone: e.target.value})} className="w-full mt-1 px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="05XX XXX XX XX" />
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-slate-700">Sifre</label>
-                    <input type="password" required value={memberForm.password} onChange={(e) => setMemberForm({...memberForm, password: e.target.value})} className="w-full mt-1 px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="********" />
-                  </div>
-                  {memberError && <p className="text-red-600 text-sm">{memberError}</p>}
-                  <button type="submit" className="w-full bg-blue-800 text-white font-bold py-3 rounded-lg hover:bg-blue-900 transition">
-                    {memberMode === 'login' ? 'Giris Yap' : 'Uye Ol'}
-                  </button>
-                </form>
+  {memberMode === 'register' && (
+    <div>
+      <label className="text-sm font-medium text-slate-700">Ad Soyad</label>
+      <input type="text" required value={memberForm.name} onChange={(e) => setMemberForm({...memberForm, name: e.target.value})} className="w-full mt-1 px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Adiniz Soyadiniz" />
+    </div>
+  )}
+  <div>
+    <label className="text-sm font-medium text-slate-700 flex items-center gap-1"><Phone size={14}/> Telefon Numarasi</label>
+    <input type="tel" required value={memberForm.phone} onChange={(e) => setMemberForm({...memberForm, phone: e.target.value})} className="w-full mt-1 px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="05XX XXX XX XX" />
+  </div>
+  {memberMode === 'register' && (
+    <div>
+      <label className="text-sm font-medium text-slate-700 flex items-center gap-1"><Mail size={14}/> E-posta Adresi</label>
+      <input type="email" required value={memberForm.email} onChange={(e) => setMemberForm({...memberForm, email: e.target.value})} className="w-full mt-1 px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="ornek@eposta.com" />
+    </div>
+  )}
+  <div>
+    <label className="text-sm font-medium text-slate-700">Sifre</label>
+    <input type="password" required value={memberForm.password} onChange={(e) => setMemberForm({...memberForm, password: e.target.value})} className="w-full mt-1 px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="********" />
+  </div>
+  {memberError && <p className="text-red-600 text-sm">{memberError}</p>}
+  <button type="submit" className="w-full bg-blue-800 text-white font-bold py-3 rounded-lg hover:bg-blue-900 transition">
+    {memberMode === 'login' ? 'Giris Yap' : 'Uye Ol'}
+  </button>
+</form>
               </>
             )}
           </div>
