@@ -27,7 +27,7 @@ const permissionLabels = {
   equipmentEdit: 'Ekipman Duzenleme',
   equipmentDelete: 'Ekipman Silme',
   requestsView: 'Talep Goruntuleme',
-  requestsManage: 'Talep Onaylama/Reddetme'
+  requestsManage: 'Talep Onaylama/Reddetme',
   viewFinances: 'Finansal Raporları ve Fiyat Toplamlarını Görme' //
 };
 
