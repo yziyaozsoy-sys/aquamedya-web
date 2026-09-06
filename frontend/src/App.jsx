@@ -102,56 +102,74 @@ function App() {
     return true;
   });
 
-   // Seçili Dönem İçin Fiyat & KDV Hesaplaması (Gelişmiş & Esnek Eşleştirme)
+     // Fiyat metninden temiz sayı çıkaran yardımcı fonksiyon ("2.500 TL" veya "2500 ₺" -> 2500)
+  const parseSafePrice = (val) => {
+    if (!val && val !== 0) return 0;
+    if (typeof val === 'number') return val;
+    // Harfleri, para birimlerini ve boşlukları at, sadece rakam, nokta ve virgül bırak
+    let clean = String(val).replace(/[^0-9.,]/g, '').trim();
+    if (!clean) return 0;
+    // Eğer 1.500 gibi binlik ayraç varsa ve virgül yoksa noktayı temizle
+    if (clean.includes('.') && !clean.includes(',')) {
+      const parts = clean.split('.');
+      if (parts[parts.length - 1].length === 3) {
+        clean = clean.replace(/\./g, '');
+      }
+    }
+    // Türk Lirası virgüllü ondalığı noktaya çevir
+    clean = clean.replace(/\./g, '').replace(',', '.');
+    return parseFloat(clean) || 0;
+  };
+
+  // Seçili Dönem Ciro & KDV Hesaplama Motoru
   const calculateFinancials = () => {
     let subtotal = 0;
-    
-    // Ekipman havuzunu bul (equipmentCatalog veya equipments hangisi doluysa)
-    const allEquips = (typeof equipmentCatalog !== 'undefined' && equipmentCatalog.length > 0) 
-      ? equipmentCatalog 
-      : (typeof equipments !== 'undefined' ? equipments : []);
 
     filteredRequests.forEach((req) => {
-      // 1. Durum: Talep nesnesinde doğrudan kayıtlı fiyat veya toplam fiyat varsa
-      if (req.totalPrice && Number(req.totalPrice) > 0) {
-        subtotal += Number(req.totalPrice);
-        return;
-      }
-      if (req.price && Number(req.price) > 0) {
-        subtotal += Number(req.price);
+      // 1. Talep üzerinde doğrudan fiyat varsa öncelikli olarak al
+      const directPrice = parseSafePrice(req.totalPrice || req.price || req.amount);
+      if (directPrice > 0) {
+        subtotal += directPrice;
         return;
       }
 
-      // 2. Durum: İsimden eşleştirme (Virgülle ayrılmış veya dizi olan tüm ürünleri ayıkla)
-      let rawItems = [];
+      // 2. Talepteki ekipman isimlerini ayıkla (virgüllü veya dizi)
+      let itemsList = [];
       if (Array.isArray(req.item)) {
-        rawItems = req.item;
+        itemsList = req.item;
       } else if (typeof req.item === 'string') {
-        rawItems = req.item.split(',').map(s => s.trim());
+        itemsList = req.item.split(',').map(s => s.trim());
       }
 
-      rawItems.forEach((singleItemName) => {
-        if (!singleItemName) return;
-        const cleanName = singleItemName.trim().toLowerCase();
-        
-        // Ekipman kataloğundan ismi eşleşen ürünü bul
-        const found = allEquips.find((eq) => 
-          eq.name && eq.name.trim().toLowerCase() === cleanName
-        );
+      itemsList.forEach((reqItemName) => {
+        if (!reqItemName) return;
+        const target = reqItemName.trim().toLowerCase();
 
-        if (found && found.price) {
-          subtotal += Number(found.price) || 0;
+        // Kataloğumuzdaki ekipmanla eşleştir
+        const matched = equipmentCatalog.find((eq) => {
+          if (!eq || !eq.name) return false;
+          const catalogName = eq.name.trim().toLowerCase();
+          // Birebir eşitlik, veya biri diğerini kapsıyor mu?
+          return (
+            catalogName === target ||
+            target.includes(catalogName) ||
+            catalogName.includes(target)
+          );
+        });
+
+        if (matched) {
+          subtotal += parseSafePrice(matched.price);
         }
       });
     });
 
-    const kdv = subtotal * 0.20; // %20 KDV
+    const kdv = subtotal * 0.20;
     const grandTotal = subtotal + kdv;
 
     return { subtotal, kdv, grandTotal };
   };
 
-    const { subtotal: reportSubtotal, kdv: reportKdv, grandTotal: reportGrandTotal } = calculateFinancials();
+  const { subtotal: reportSubtotal, kdv: reportKdv, grandTotal: reportGrandTotal } = calculateFinancials();
   // Kiralama Formu State'i
   const [deliveryType, setDeliveryType] = useState('MERKEZ');
   const [rentalForm, setRentalForm] = useState({ 
