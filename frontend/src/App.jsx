@@ -890,21 +890,32 @@ function App() {
             </div>
 
             <div className="flex gap-2 mb-6 bg-slate-200/60 p-1.5 rounded-xl w-fit flex-wrap">
-                           <button onClick={() => setStaffSubTab('management')} className={"px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-1.5 " + (staffSubTab === 'management' ? 'bg-white text-blue-900 shadow-sm' : 'text-slate-600 hover:text-slate-900')}>
-                <Users size={14}/> Personel Yönetimi
+              <button onClick={() => setStaffSubTab('stock')} className={"px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-1.5 " + (staffSubTab === 'stock' ? 'bg-white text-blue-900 shadow-sm' : 'text-slate-600 hover:text-slate-900')}>
+                <Package size={14}/> Stok Yönetimi
               </button>
-            )}
-          </div>
 
-          {/* PERSONEL: STOK YÖNETİMİ SEKMESİ */}
-          {staffSubTab === 'stock' && (
-            <div className="grid md:grid-cols-2 gap-6">
-              {can('equipmentAdd') && (
-                <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
-                  <h3 className="font-bold text-lg mb-4 flex items-center gap-2 text-slate-800">
-                    {editingId ? <Edit2 size={18} className="text-blue-600" /> : <Plus size={18} className="text-blue-600" />} 
-                    {editingId ? 'Ekipmanı Güncelle' : 'Yeni Ekipman Ekle'}
-                  </h3>
+              {can('requestsView') && (
+                <button onClick={() => setStaffSubTab('requests')} className={"px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-1.5 " + (staffSubTab === 'requests' ? 'bg-white text-blue-900 shadow-sm' : 'text-slate-600 hover:text-slate-900')}>
+                  <Bell size={14}/> Kiralama Talepleri ({requests.filter(r => r.status?.toLowerCase() === 'bekliyor').length})
+                </button>
+              )}
+
+              {isAdmin && (
+                <button onClick={() => setStaffSubTab('management')} className={"px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-1.5 " + (staffSubTab === 'management' ? 'bg-white text-blue-900 shadow-sm' : 'text-slate-600 hover:text-slate-900')}>
+                  <Users size={14}/> Personel Yönetimi
+                </button>
+              )}
+            </div>
+
+            {/* PERSONEL: STOK YÖNETİMİ SEKMESİ */}
+            {staffSubTab === 'stock' && (
+              <div className="grid md:grid-cols-2 gap-6">
+                {can('equipmentAdd') && (
+                  <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+                    <h3 className="font-bold text-lg mb-4 flex items-center gap-2 text-slate-800">
+                      {editingId ? <Edit2 size={18} className="text-blue-600" /> : <Plus size={18} className="text-blue-600" />} 
+                      {editingId ? 'Ekipmanı Güncelle' : 'Yeni Ekipman Ekle'}
+                    </h3>
                   <form onSubmit={handleAddOrUpdateEquip} className="space-y-3">
                     <div>
                       <label className="text-xs font-bold text-slate-700">Ekipman Adı</label>
@@ -1005,7 +1016,7 @@ function App() {
 
               <div className="space-y-4">
                 {requests.map((req) => (
-                  <div key={req._id} className={"border rounded-2xl p-4 transition " + (req.status === 'Bekliyor' ? 'border-amber-200 bg-amber-50/20' : 'border-slate-200 bg-white')}>
+                  <div key={req._id} className={"border rounded-2xl p-4 transition " + (req.status === 'bekliyor' ? 'border-amber-200 bg-amber-50/20' : 'border-slate-200 bg-white')}>
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div className="space-y-1 max-w-xl">
                         <div className="flex items-center gap-2 flex-wrap">
@@ -1051,37 +1062,43 @@ function App() {
                       </div>
 
                       <div className="flex items-center gap-2 self-start md:self-center">
-                        <span className={
-                          "text-xs font-bold px-3 py-1.5 rounded-full " +
-                          (req.status === 'Onaylandı' ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' :
-                           req.status === 'Reddedildi' ? 'bg-rose-100 text-rose-800 border border-rose-300' :
-                           'bg-amber-100 text-amber-800 border border-amber-300 animate-pulse')
-                        }>
-                          {req.status}
-                        </span>
-
+                       {/* Durum Rozeti */}
+<span className={
+  "text-xs font-bold px-3 py-1.5 rounded-full " +
+  ((req.status?.toLowerCase() === 'onaylandı' || req.status?.toLowerCase() === 'onaylandi') 
+    ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' 
+    : (req.status?.toLowerCase() === 'reddedildi') 
+    ? 'bg-rose-100 text-rose-800 border border-rose-300' 
+    : 'bg-amber-100 text-amber-800 border border-amber-300 animate-pulse')
+}>
+  {req.status?.toLowerCase() === 'onaylandi' || req.status?.toLowerCase() === 'onaylandı' 
+    ? 'Onaylandı' 
+    : req.status?.toLowerCase() === 'reddedildi' 
+    ? 'reddedildi' 
+    : 'bekliyor'}
+</span>
                         <button onClick={() => downloadRequestAsWord(req)} className="p-2 bg-slate-100 text-slate-700 rounded-xl hover:bg-slate-200 transition" title="Word Sözleşme Formu Olarak İndir">
                           <FileText size={16} />
                         </button>
 
-                        {can('requestsManage') && req.status === 'Bekliyor' && (
-                          <div className="flex items-center gap-1 border-l border-slate-200 pl-2">
-                            <button 
-                              onClick={() => updateStatus(req._id, 'Onaylandı')} 
-                              className="px-3 py-1.5 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition flex items-center gap-1 text-xs font-bold shadow-sm"
-                              title="Onayla ve E-posta Gönder"
-                            >
-                              <Check size={14} /> Onayla
-                            </button>
-                            <button 
-                              onClick={() => updateStatus(req._id, 'Reddedildi')} 
-                              className="px-3 py-1.5 bg-rose-50 text-rose-700 rounded-xl hover:bg-rose-100 transition flex items-center gap-1 text-xs font-bold"
-                              title="Talebi Reddet"
-                            >
-                              <X size={14} /> Reddet
-                            </button>
-                          </div>
-                        )}
+                        {can('requestsManage') && (req.status?.toLowerCase() === 'bekliyor') && (
+  <div className="flex items-center gap-1 border-l border-slate-200 pl-2">
+    <button 
+      onClick={() => updateStatus(req._id || req.id, 'Onaylandı')} 
+      className="px-3 py-1.5 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition flex items-center gap-1 text-xs font-bold shadow-sm"
+      title="Onayla ve E-posta Gönder"
+    >
+      <Check size={14} /> Onayla
+    </button>
+    <button 
+      onClick={() => updateStatus(req._id || req.id, 'Reddedildi')} 
+      className="px-3 py-1.5 bg-rose-50 text-rose-700 rounded-xl hover:bg-rose-100 transition flex items-center gap-1 text-xs font-bold"
+      title="Talebi Reddet"
+    >
+      <X size={14} /> Reddet
+    </button>
+  </div>
+)}
                       </div>
                     </div>
                   </div>
