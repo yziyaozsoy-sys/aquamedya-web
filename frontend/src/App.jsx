@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { 
-  Camera, Calendar, MapPin, Clock, User, Lock, Package, Bell, CheckCircle, 
+  Camera, Calendar, MapPin, Clock, User, Package, Bell, CheckCircle, 
   Phone, Mail, Building2, Video, Mic, Lightbulb, Move3d, ScreenShare, Star, 
   Upload, Trash2, Edit2, Plus, X, Shield, Users, LogOut, AlertTriangle, 
   FileText, AlertCircle, Check
@@ -64,7 +64,7 @@ function App() {
   const [equipmentCatalog, setEquipmentCatalog] = useState([]);
 
   // Kiralama Formu State'i
-  const [deliveryType, setDeliveryType] = useState('MERKEZ'); // 'MERKEZ' veya 'ADRES'
+  const [deliveryType, setDeliveryType] = useState('MERKEZ');
   const [rentalForm, setRentalForm] = useState({ 
     equipment: [], 
     date: '', 
@@ -75,11 +75,12 @@ function App() {
   const [showSuccess, setShowSuccess] = useState(false);
   const [customCategory, setCustomCategory] = useState('');
   const [isNewCategory, setIsNewCategory] = useState(false);
-  const [currency, setCurrency] = useState('₺'); // '₺', '$', '€'
+  const [currency, setCurrency] = useState('₺');
+  
   // 2 Kademeli Çakışma Uyarı Modalı State'i
   const [conflictModal, setConflictModal] = useState({
     isOpen: false,
-    step: 1, // 1: İlk uyarı, 2: Kırmızı kesin onay
+    step: 1,
     requestId: null,
     data: null
   });
@@ -87,7 +88,7 @@ function App() {
   const emptyNewEquip = { name: '', category: 'Kamera', specsText: '', price: '', stock: 1, photoFile: null, photoPreview: null, videoUrl: '' };
   const [newEquip, setNewEquip] = useState(emptyNewEquip);
   const [editingId, setEditingId] = useState(null);
-
+  const [selectedCatalogCategory, setSelectedCatalogCategory] = useState('Tümü');
   const [staffList, setStaffList] = useState([]);
   const emptyNewStaff = { username: '', password: '', displayName: '', permissions: Object.assign({}, emptyPermissions) };
   const [newStaff, setNewStaff] = useState(emptyNewStaff);
@@ -249,7 +250,6 @@ function App() {
     }
   };
 
-  // Talep Onaylama ve Çakışma Yönetimi
   const updateStatus = async (id, newStatus, force = false) => {
     if (!can('requestsManage')) return;
     try {
@@ -258,7 +258,6 @@ function App() {
       fetchRequests();
     } catch (err) {
       if (err.response && err.response.status === 409 && err.response.data.conflict) {
-        // Çakışma yakalandı -> 1. Kademeli Uyarıyı Aç
         setConflictModal({
           isOpen: true,
           step: 1,
@@ -327,16 +326,15 @@ function App() {
       setNewEquip({ ...newEquip, photoFile: file, photoPreview: URL.createObjectURL(file) });
     }
   };
+
   const handleAddOrUpdateEquip = async (e) => {
     e.preventDefault();
     const specsArr = newEquip.specsText.split('\n').map(s => s.trim()).filter(s => s);
 
-    // Dinamik Kategori Kontrolü
     const finalCategory = (isNewCategory && customCategory.trim()) 
       ? customCategory.trim() 
       : newEquip.category;
 
-    // Otomatik Para Birimi ve / Gün Standartı: "2500 ₺ / Gün"
     const finalPrice = `${newEquip.price} ${currency} / Gün`;
 
     const formData = new FormData();
@@ -372,13 +370,11 @@ function App() {
     if (!can('equipmentEdit')) return;
     setEditingId(eq._id || eq.id);
 
-    // Fiyattan sadece rakamı ve seçili para birimini ayıkla
-    const rawPrice = eq.price ? eq.price.replace(/[^0-9.,]/g, '').trim() : '';
+    const parsedPrice = eq.price ? eq.price.replace(/[^0-9.,]/g, '').trim() : '';
     const detectedCurrency = eq.price?.includes('$') ? '$' : eq.price?.includes('€') ? '€' : '₺';
     setCurrency(detectedCurrency);
 
-    // Kategori kontrolü (Özel bir kategoriyse kutuyu aç)
-    const standardCategories = ['Kamera', 'Lens & Objektif', 'Işık & Aydınlatma', 'Ses Sistemleri', 'Gimbal & Stabilizasyon', 'Hava Çekimi & Drone', 'Monitör & Reji', 'Stüdyo Ekipmanları', 'Diğer'];
+    const standardCategories = ['Kamera', 'Isik', 'Ses', 'Stabilizasyon', 'Hava Cekimi', 'Studyo', 'Diger'];
     if (eq.category && !standardCategories.includes(eq.category)) {
       setIsNewCategory(true);
       setCustomCategory(eq.category);
@@ -391,7 +387,7 @@ function App() {
       name: eq.name, 
       category: eq.category || 'Kamera', 
       specsText: (eq.specs || []).join('\n'),
-      price: rawPrice, 
+      price: parsedPrice, 
       stock: eq.stock, 
       photoFile: null,
       photoPreview: eq.photo ? (API_URL + eq.photo) : null, 
@@ -418,6 +414,7 @@ function App() {
   const togglePermission = (key) => {
     setNewStaff(prev => ({ ...prev, permissions: { ...prev.permissions, [key]: !prev.permissions[key] } }));
   };
+
   const handleAddOrUpdateStaff = async (e) => {
     e.preventDefault();
     setStaffFormError('');
@@ -493,7 +490,6 @@ function App() {
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden border border-slate-200 animate-in fade-in zoom-in duration-150">
             {conflictModal.step === 1 ? (
-              // 1. Kademe: Sarı Bilgilendirme ve İtiraz Uyarısı
               <div className="p-6">
                 <div className="w-12 h-12 bg-amber-100 rounded-full flex items-center justify-center mb-4 text-amber-600">
                   <AlertTriangle size={28} />
@@ -517,7 +513,6 @@ function App() {
                 </div>
               </div>
             ) : (
-              // 2. Kademe: Kırmızı Kesin Güvenlik Onayı
               <div className="p-6 bg-red-50/40">
                 <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mb-4 text-red-600">
                   <AlertCircle size={28} />
@@ -793,7 +788,6 @@ function App() {
                 )}
 
                 <form onSubmit={handleRentalSubmit} className="space-y-4">
-                  {/* Ekipman Listesi */}
                   <div>
                     <label className="text-xs font-bold text-slate-700">Seçilen Ekipmanlar</label>
                     <div className="flex flex-wrap gap-2 mt-2 mb-2 min-h-[36px] p-2 bg-slate-50 rounded-xl border border-slate-200">
@@ -811,7 +805,6 @@ function App() {
                     </select>
                   </div>
 
-                  {/* Tarih Saat */}
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="text-xs font-bold text-slate-700 flex items-center gap-1"><Calendar size={13}/> Kiralama Tarihi</label>
@@ -823,7 +816,6 @@ function App() {
                     </div>
                   </div>
 
-                  {/* TESLİMAT ŞEKLİ SEÇENEĞİ (MERKEZDEN ALMA VEYA ADRESE) */}
                   <div className="border border-slate-200 rounded-2xl p-4 bg-slate-50/50">
                     <label className="text-xs font-bold text-slate-800 block mb-2">Teslimat Yöntemi</label>
                     <div className="grid grid-cols-2 gap-3 mb-3">
@@ -926,7 +918,8 @@ function App() {
             </div>
 
             <div className="flex gap-2 mb-6 bg-slate-200/60 p-1.5 rounded-xl w-fit flex-wrap">
-              <button onClick={() => setStaffSubTab('stock')} className={"px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-1.5 " + (staffSubTab === 'stock' ? 'bg-white text-blue-900 shadow-sm' : 'text-slate-600 hover:text-slate-900')}>
+              <button onClick={() => setStaffSubTab('stock')} className={"px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-1.5 " + (staffSubTab ===
+'stock' ? 'bg-white text-blue-900 shadow-sm' : 'text-slate-600 hover:text-slate-900')}>
                 <Package size={14}/> Stok Yönetimi
               </button>
 
@@ -946,355 +939,447 @@ function App() {
             {/* PERSONEL: STOK YÖNETİMİ SEKMESİ */}
             {staffSubTab === 'stock' && (
               <div className="grid md:grid-cols-2 gap-6">
+                {/* SOL TARAF: EKİPMAN EKLE / DÜZENLE FORMU */}
                 {can('equipmentAdd') && (
                   <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
                     <h3 className="font-bold text-lg mb-4 flex items-center gap-2 text-slate-800">
                       {editingId ? <Edit2 size={18} className="text-blue-600" /> : <Plus size={18} className="text-blue-600" />} 
                       {editingId ? 'Ekipmanı Güncelle' : 'Yeni Ekipman Ekle'}
                     </h3>
-                  <form onSubmit={handleAddOrUpdateEquip} className="space-y-3">
-                    <div>
-                      <label className="text-xs font-bold text-slate-700">Ekipman Adı</label>
-                      <input type="text" required value={newEquip.name} onChange={(e) => setNewEquip({...newEquip, name: e.target.value})} placeholder="Örn: Sony FX3 Sinema Kamerası" className="w-full mt-1 px-4 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm" />
-                    </div>
+                    <form onSubmit={handleAddOrUpdateEquip} className="space-y-3">
+                      <div>
+                        <label className="text-xs font-bold text-slate-700">Ekipman Adı</label>
+                        <input 
+                          type="text" 
+                          required 
+                          value={newEquip.name} 
+                          onChange={(e) => setNewEquip({...newEquip, name: e.target.value})} 
+                          placeholder="Örn: Sony FX3 Sinema Kamerası" 
+                          className="w-full mt-1 px-4 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm" 
+                        />
+                      </div>
 
-                    {/* DİNAMİK KATEGORİ SEÇİMİ VE YENİ KATEGORİ ALANI */}
-                    <div>
-                      <label className="text-xs font-bold text-slate-700">Kategori</label>
-                      <div className="space-y-2 mt-1">
-                        <select 
-                          value={isNewCategory ? '__new__' : newEquip.category} 
+                      {/* KATEGORİ SEÇİMİ VE YENİ KATEGORİ GİRİŞİ */}
+                      <div>
+                        <label className="text-xs font-bold text-slate-700">Kategori</label>
+                        <select
+                          value={isNewCategory ? '__NEW__' : newEquip.category}
                           onChange={(e) => {
-                            if (e.target.value === '__new__') {
+                            if (e.target.value === '__NEW__') {
                               setIsNewCategory(true);
+                              setCustomCategory('');
                             } else {
                               setIsNewCategory(false);
-                              setNewEquip({...newEquip, category: e.target.value});
+                              setNewEquip({ ...newEquip, category: e.target.value });
                             }
-                          }} 
-                          className="w-full px-4 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm bg-white"
+                          }}
+                          className="w-full mt-1 px-4 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm bg-white"
                         >
                           {Object.keys(categoryIcons).map((cat) => (
                             <option key={cat} value={cat}>{cat}</option>
                           ))}
-                          <option value="__new__" className="font-bold text-blue-700">+ Yeni Kategori Ekle...</option>
+                          <option value="__NEW__">+ Yeni Kategori Ekle...</option>
                         </select>
 
                         {isNewCategory && (
-                          <input 
-                            type="text" 
-                            required 
-                            autoFocus 
-                            placeholder="Yeni Kategori Adını Yazın..." 
-                            value={customCategory} 
-                            onChange={(e) => setCustomCategory(e.target.value)} 
-                            className="w-full px-4 py-2 border-2 border-blue-600 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm bg-white" 
-                          />
+                          <div className="mt-2">
+                            <input
+                              type="text"
+                              required
+                              placeholder="Yeni kategori adı yazın (Örn: Gimbal & Destek)"
+                              value={customCategory}
+                              onChange={(e) => setCustomCategory(e.target.value)}
+                              className="w-full px-4 py-2 border-2 border-blue-500 rounded-xl text-sm focus:ring-2 focus:ring-blue-400 outline-none bg-blue-50/30"
+                              autoFocus
+                            />
+                          </div>
                         )}
                       </div>
-                    </div>
 
-                    <div>
-                      <label className="text-xs font-bold text-slate-700">Teknik Özellikler (Her satıra bir özellik)</label>
-                      <textarea value={newEquip.specsText} onChange={(e) => setNewEquip({...newEquip, specsText: e.target.value})} placeholder="4K 120fps Kayıt&#10;Dual Base ISO&#10;Full Frame Sensör" rows={3} className="w-full mt-1 px-4 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm"></textarea>
-                    </div>
-
-                    {/* GÜNLÜK KİRALAMA BEDELİ (PARA BİRİMİ + / GÜN) & STOK ADEDİ */}
-                    <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <label className="text-xs font-bold text-slate-700">Günlük Kiralama Bedeli</label>
-                        <div className="flex items-center gap-1.5 mt-1">
-                          <select
-                            value={currency}
-                            onChange={(e) => setCurrency(e.target.value)}
-                            className="px-2.5 py-2 border border-slate-300 rounded-xl text-xs font-bold text-slate-800 bg-slate-50 outline-none cursor-pointer"
-                          >
-                            <option value="₺">₺ (TL)</option>
-                            <option value="$">$ (USD)</option>
-                            <option value="€">€ (EUR)</option>
-                          </select>
+                        <label className="text-xs font-bold text-slate-700">Teknik Özellikler (Her satıra bir özellik)</label>
+                        <textarea 
+                          value={newEquip.specsText} 
+                          onChange={(e) => setNewEquip({...newEquip, specsText: e.target.value})} 
+                          placeholder="4K 120fps Kayıt&#10;Dual Base ISO&#10;Full Frame Sensör" 
+                          rows={3} 
+                          className="w-full mt-1 px-4 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                        ></textarea>
+                      </div>
+
+                      {/* GÜNLÜK KİRALAMA BEDELİ & STOK ADEDİ */}
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-xs font-bold text-slate-700">Günlük Kiralama Bedeli</label>
+                          <div className="flex items-center gap-1.5 mt-1">
+                            <select
+                              value={currency}
+                              onChange={(e) => setCurrency(e.target.value)}
+                              className="px-2.5 py-2 border border-slate-300 rounded-xl text-xs font-bold text-slate-800 bg-slate-50 outline-none cursor-pointer"
+                            >
+                              <option value="₺">₺ (TL)</option>
+                              <option value="$">$ (USD)</option>
+                              <option value="€">€ (EUR)</option>
+                            </select>
+                            <input 
+                              type="number" 
+                              required 
+                              value={newEquip.price} 
+                              onChange={(e) => setNewEquip({...newEquip, price: e.target.value})} 
+                              placeholder="2500" 
+                              className="w-full min-w-0 px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm font-semibold" 
+                            />
+                            <span className="px-2.5 py-2 bg-slate-100 border border-slate-200 text-slate-500 rounded-xl text-xs font-bold whitespace-nowrap">
+                              / Gün
+                            </span>
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="text-xs font-bold text-slate-700">Stok Adedi</label>
                           <input 
                             type="number" 
+                            min="0" 
                             required 
-                            value={newEquip.price} 
-                            onChange={(e) => setNewEquip({...newEquip, price: e.target.value})} 
-                            placeholder="2500" 
-                            className="w-full min-w-0 px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm font-semibold" 
+                            value={newEquip.stock} 
+                            onChange={(e) => setNewEquip({...newEquip, stock: parseInt(e.target.value) || 0})} 
+                            placeholder="1" 
+                            className="w-full mt-1 px-4 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm" 
                           />
-                          <span className="px-2.5 py-2 bg-slate-100 border border-slate-200 text-slate-500 rounded-xl text-xs font-bold whitespace-nowrap">
-                            / Gün
-                          </span>
                         </div>
-                        <p className="text-[10px] text-slate-400 mt-1">
-                          Kayıt: <span className="font-bold text-blue-900">{newEquip.price || '0'} {currency} / Gün</span>
-                        </p>
                       </div>
 
+                      {/* VİDEO YOUTUBE LINK */}
                       <div>
-                        <label className="text-xs font-bold text-slate-700">Stok Adedi</label>
-                        <input type="number" min="0" required value={newEquip.stock} onChange={(e) => setNewEquip({...newEquip, stock: e.target.value})} placeholder="1" className="w-full mt-1 px-4 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm" />
+                        <label className="text-xs font-bold text-slate-700">Video Tanıtım Linki (Opsiyonel)</label>
+                        <input 
+                          type="url" 
+                          value={newEquip.videoUrl || ''} 
+                          onChange={(e) => setNewEquip({...newEquip, videoUrl: e.target.value})} 
+                          placeholder="https://youtube.com/watch?v=..." 
+                          className="w-full mt-1 px-4 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm" 
+                        />
+                      </div>
+
+                      {/* EKİPMAN GÖRSELİ */}
+                      <div>
+                        <label className="flex items-center gap-2 text-xs font-bold text-slate-700 cursor-pointer bg-slate-50 border border-dashed border-slate-300 rounded-xl px-4 py-3 hover:bg-slate-100 transition">
+                          <Upload size={16} className="text-blue-600"/> Ekipman Görseli Yükle
+                          <input type="file" accept="image/*" onChange={handlePhotoChange} className="hidden" />
+                        </label>
+                        {newEquip.photoPreview && <img src={newEquip.photoPreview} alt="Önizleme" className="mt-2 h-24 rounded-xl object-cover border border-slate-200" />}
+                      </div>
+
+                      <div className="flex gap-2 pt-2">
+                        <button 
+                          type="submit" 
+                          className="flex-1 bg-blue-900 text-white font-bold py-2.5 rounded-xl hover:bg-blue-800 transition text-sm shadow"
+                        >
+                          {editingId ? 'Değişiklikleri Kaydet' : 'Envantere Ekle'}
+                        </button>
+                        {editingId && (
+                          <button 
+                            type="button" 
+                            onClick={cancelEdit} 
+                            className="px-4 bg-slate-100 text-slate-700 font-medium rounded-xl hover:bg-slate-200 transition text-sm"
+                          >
+                            Vazgeç
+                          </button>
+                        )}
+                      </div>
+                    </form>
+                  </div>
+                )}
+
+                {/* SAĞ TARAF: MEVCUT ENVANTER VE DİNAMİK FİLTRE */}
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 flex flex-col h-full">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="font-bold text-lg text-slate-800">
+                      Mevcut Envanter ({equipmentCatalog.length})
+                    </h3>
+                    {selectedCatalogCategory !== 'Tümü' && (
+                      <button 
+                        type="button"
+                        onClick={() => setSelectedCatalogCategory('Tümü')}
+                        className="text-xs text-blue-600 hover:underline font-semibold"
+                      >
+                        Filtreyi Temizle
+                      </button>
+                    )}
+                  </div>
+
+                  {/* DİNAMİK KATEGORİ FİLTRE BUTONLARI */}
+                  <div className="flex items-center gap-1.5 overflow-x-auto pb-3 mb-3 scrollbar-thin">
+                    {['Tümü', ...Array.from(new Set(equipmentCatalog.map(item => item.category).filter(Boolean)))].map((cat) => {
+                      const count = cat === 'Tümü' 
+                        ? equipmentCatalog.length 
+                        : equipmentCatalog.filter(e => e.category === cat).length;
+                      const isActive = selectedCatalogCategory === cat;
+
+                      return (
+                        <button
+                          key={cat}
+                          type="button"
+                          onClick={() => setSelectedCatalogCategory(cat)}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition flex items-center gap-1.5 ${
+                            isActive 
+                              ? 'bg-blue-900 text-white shadow-sm' 
+                              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                          }`}
+                        >
+                          <span>{cat}</span>
+                          <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${
+                            isActive ? 'bg-blue-800 text-white' : 'bg-slate-200 text-slate-600'
+                          }`}>
+                            {count}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* SÜZÜLMÜŞ LİSTE */}
+                  <div className="space-y-3 max-h-[520px] overflow-y-auto pr-1 flex-1">
+                    {equipmentCatalog
+                      .filter((eq) => selectedCatalogCategory === 'Tümü' || eq.category === selectedCatalogCategory)
+                      .map((eq) => (
+                        <div key={eq._id || eq.id} className="flex items-center justify-between border border-slate-100 rounded-xl p-3 hover:border-slate-200 transition bg-slate-50/50">
+                          <div className="flex items-center gap-3">
+                            {eq.photo ? (
+                              <img src={API_URL + eq.photo} alt={eq.name} className="w-12 h-12 rounded-xl object-cover border border-slate-200" />
+                            ) : (
+                              <div className="w-12 h-12 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center">
+                                {React.createElement(categoryIcons[eq.category] || Package, { size: 20 })}
+                              </div>
+                            )}
+                            <div>
+                              <p className="font-bold text-slate-800 text-sm">{eq.name}</p>
+                              <p className="text-xs text-slate-500">{eq.category} · Stok: <b>{eq.stock}</b> · {eq.price}</p>
+                            </div>
+                          </div>
+                          <div className="flex gap-1.5">
+                            {can('equipmentEdit') && (
+                              <button onClick={() => handleEditEquip(eq)} className="p-2 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition" title="Düzenle">
+                                <Edit2 size={14} />
+                              </button>
+                            )}
+                            {can('equipmentDelete') && (
+                              <button onClick={() => handleDeleteEquip(eq._id || eq.id)} className="p-2 bg-rose-50 text-rose-600 rounded-lg hover:bg-rose-100 transition" title="Sil">
+                                <Trash2 size={14} />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+
+                    {equipmentCatalog.filter((eq) => selectedCatalogCategory === 'Tümü' || eq.category === selectedCatalogCategory).length === 0 && (
+                      <p className="text-slate-400 text-sm text-center py-10">
+                        {selectedCatalogCategory === 'Tümü' 
+                          ? 'Envanterde henüz ekipman bulunmuyor.' 
+                          : `"${selectedCatalogCategory}" kategorisinde ekipman bulunamadı.`}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* PERSONEL: KİRALAMA TALEPLERİ SEKMESİ */}
+            {staffSubTab === 'requests' && can('requestsView') && (
+              <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+                <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+                  <h3 className="font-bold text-lg flex items-center gap-2 text-slate-900">
+                    <Bell size={20} className="text-blue-700" /> Gelen Kiralama Talepleri
+                  </h3>
+                  <span className="text-xs font-semibold bg-slate-100 text-slate-600 px-3 py-1 rounded-full">
+                    Toplam {requests.length} Talep
+                  </span>
+                </div>
+
+                <div className="space-y-4">
+                  {requests.map((req) => (
+                    <div key={req._id} className={"border rounded-2xl p-4 transition " + (req.status === 'bekliyor' ? 'border-amber-200 bg-amber-50/20' : 'border-slate-200 bg-white')}>
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="space-y-1 max-w-xl">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="font-bold text-slate-900 text-base">
+                              {Array.isArray(req.item) ? req.item.join(', ') : req.item}
+                            </p>
+                            {req.conflictIgnored && (
+                              <span className="text-[10px] font-bold bg-rose-100 text-rose-700 border border-rose-300 px-2 py-0.5 rounded-full flex items-center gap-1">
+                                <AlertTriangle size={10} /> Çakışma Göz Ardı Edildi
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="text-xs text-slate-600 flex items-center gap-3 flex-wrap">
+                            <span className="flex items-center gap-1 font-semibold text-slate-700"><Calendar size={13} className="text-blue-600" /> {req.date}</span>
+                            <span className="flex items-center gap-1 font-semibold text-slate-700"><Clock size={13} className="text-blue-600" /> {req.time}</span>
+                            <span className="flex items-center gap-1 font-semibold text-slate-700">
+                              <MapPin size={13} className="text-cyan-600" /> 
+                              {req.location === 'MERKEZDEN_TESLIM' ? (
+                                <span className="text-cyan-700 bg-cyan-50 px-2 py-0.5 rounded font-bold">🏢 Merkezden Kendisi Alacak</span>
+                              ) : (
+                                <span>🚚 {req.location}</span>
+                              )}
+                            </span>
+                          </div>
+
+                          <div className="pt-1 flex items-center gap-4 text-xs text-slate-600 flex-wrap">
+                            <span className="flex items-center gap-1 text-blue-900 font-bold"><User size={13} className="text-blue-600" /> {req.customer}</span>
+                            {req.email && <span className="flex items-center gap-1 text-slate-500"><Mail size={13} /> {req.email}</span>}
+                          </div>
+
+                          {req.notes && (
+                            <p className="text-xs text-slate-500 bg-slate-50 p-2 rounded-lg border border-slate-100 mt-2">
+                              <b>Müşteri Notu:</b> {req.notes}
+                            </p>
+                          )}
+
+                          {req.approvedBy && (
+                            <p className="text-[11px] text-emerald-700 font-medium pt-1">
+                              ✓ <b>{req.approvedBy}</b> tarafından {req.approvedAt ? new Date(req.approvedAt).toLocaleDateString('tr-TR') : ''} tarihinde onaylandı.
+                            </p>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-2 self-start md:self-center">
+                          <span className={
+                            "text-xs font-bold px-3 py-1.5 rounded-full " +
+                            ((req.status?.toLowerCase() === 'onaylandı' || req.status?.toLowerCase() === 'onaylandi') 
+                              ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' 
+                              : (req.status?.toLowerCase() === 'reddedildi') 
+                              ? 'bg-rose-100 text-rose-800 border border-rose-300' 
+                              : 'bg-amber-100 text-amber-800 border border-amber-300 animate-pulse')
+                          }>
+                            {req.status?.toLowerCase() === 'onaylandi' || req.status?.toLowerCase() === 'onaylandı' 
+                              ? 'Onaylandı' 
+                              : req.status?.toLowerCase() === 'reddedildi' 
+                              ? 'reddedildi' 
+                              : 'bekliyor'}
+                          </span>
+                          <button onClick={() => downloadRequestAsWord(req)} className="p-2 bg-slate-100 text-slate-700 rounded-xl hover:bg-slate-200 transition" title="Word Sözleşme Formu Olarak İndir">
+                            <FileText size={16} />
+                          </button>
+
+                          {can('requestsManage') && (req.status?.toLowerCase() === 'bekliyor') && (
+                            <div className="flex items-center gap-1 border-l border-slate-200 pl-2">
+                              <button 
+                                onClick={() => updateStatus(req._id || req.id, 'Onaylandı')} 
+                                className="px-3 py-1.5 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition flex items-center gap-1 text-xs font-bold shadow-sm"
+                                title="Onayla ve E-posta Gönder"
+                              >
+                                <Check size={14} /> Onayla
+                              </button>
+                              <button 
+                                onClick={() => updateStatus(req._id || req.id, 'Reddedildi')} 
+                                className="px-3 py-1.5 bg-rose-50 text-rose-700 rounded-xl hover:bg-rose-100 transition flex items-center gap-1 text-xs font-bold"
+                                title="Talebi Reddet"
+                              >
+                                <X size={14} /> Reddet
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+
+                  {requests.length === 0 && (
+                    <p className="text-slate-400 text-sm text-center py-12">Sistemde henüz kayıtlı talep bulunmuyor.</p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* PERSONEL: PERSONEL YÖNETİMİ (SADECE ADMİN) */}
+            {staffSubTab === 'management' && isAdmin && (
+              <div className="grid md:grid-cols-2 gap-6">
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+                  <h3 className="font-bold text-lg mb-4 flex items-center gap-2 text-slate-800">
+                    {editingStaffId ? <Edit2 size={18} className="text-blue-600" /> : <Plus size={18} className="text-blue-600" />} 
+                    {editingStaffId ? 'Personel Yetkilerini Düzenle' : 'Yeni Personel Tanımla'}
+                  </h3>
+                  <form onSubmit={handleAddOrUpdateStaff} className="space-y-3">
+                    <div>
+                      <label className="text-xs font-bold text-slate-700">Kullanıcı Adı</label>
+                      <input type="text" required disabled={!!editingStaffId} value={newStaff.username} onChange={(e) => setNewStaff({...newStaff, username: e.target.value})} placeholder="Örn: yusuf" className="w-full mt-1 px-4 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm disabled:bg-slate-100" />
+                    </div>
+                    <div>
+                      <label className="text-xs font-bold text-slate-700">Görünen Ad Soyad</label>
+                      <input type="text" value={newStaff.displayName} onChange={(e) => setNewStaff({...newStaff, displayName: e.target.value})} placeholder="Örn: Yusuf Sarser" className="w-full mt-1 px-4 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm" />
+                    </div>
+                    <div>
+                      <label className="text-xs font-bold text-slate-700">{editingStaffId ? "Yeni Şifre (Boş bırakırsanız değişmez)" : "Giriş Şifresi"}</label>
+                      <input type="password" required={!editingStaffId} value={newStaff.password} onChange={(e) => setNewStaff({...newStaff, password: e.target.value})} placeholder="••••••••" className="w-full mt-1 px-4 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm" />
+                    </div>
+
+                    <div className="border border-slate-200 rounded-xl p-3.5 bg-slate-50">
+                      <p className="text-xs font-bold text-slate-600 mb-2.5 uppercase tracking-wide">Personel Yetki İzinleri</p>
+                      <div className="space-y-2">
+                        {Object.keys(permissionLabels).map((key) => (
+                          <label key={key} className="flex items-center gap-2 text-xs font-medium text-slate-700 cursor-pointer">
+                            <input type="checkbox" checked={!!newStaff.permissions[key]} onChange={() => togglePermission(key)} className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500" />
+                            {permissionLabels[key]}
+                          </label>
+                        ))}
                       </div>
                     </div>
 
-                    <div>
-                      <label className="text-xs font-bold text-slate-700">Video Tanıtım URL (Opsiyonel)</label>
-                      <input type="text" value={newEquip.videoUrl} onChange={(e) => setNewEquip({...newEquip, videoUrl: e.target.value})} placeholder="https://youtube.com/..." className="w-full mt-1 px-4 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm" />
-                    </div>
-
-                    <div>
-                      <label className="flex items-center gap-2 text-xs font-bold text-slate-700 cursor-pointer bg-slate-50 border border-dashed border-slate-300 rounded-xl px-4 py-3 hover:bg-slate-100 transition">
-                        <Upload size={16} className="text-blue-600"/> Ekipman Görseli Yükle
-                        <input type="file" accept="image/*" onChange={handlePhotoChange} className="hidden" />
-                      </label>
-                      {newEquip.photoPreview && <img src={newEquip.photoPreview} alt="Önizleme" className="mt-2 h-24 rounded-xl object-cover border border-slate-200" />}
-                    </div>
-
+                    {staffFormError && <p className="text-rose-600 text-xs font-semibold">{staffFormError}</p>}
                     <div className="flex gap-2 pt-2">
                       <button type="submit" className="flex-1 bg-blue-900 text-white font-bold py-2.5 rounded-xl hover:bg-blue-800 transition text-sm shadow">
-                        {editingId ? 'Değişiklikleri Kaydet' : 'Envantere Ekle'}
+                        {editingStaffId ? 'Yetkileri Güncelle' : 'Personeli Kaydet'}
                       </button>
-                      {editingId && (
-                        <button type="button" onClick={cancelEdit} className="px-4 bg-slate-100 text-slate-700 font-medium rounded-xl hover:bg-slate-200 transition text-sm">
+                      {editingStaffId && (
+                        <button type="button" onClick={cancelStaffEdit} className="px-4 bg-slate-100 text-slate-700 font-medium rounded-xl hover:bg-slate-200 transition text-sm">
                           Vazgeç
                         </button>
                       )}
                     </div>
                   </form>
                 </div>
-              )}
 
-              <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
-                <h3 className="font-bold text-lg mb-4 text-slate-800">Mevcut Envanter ({equipmentCatalog.length})</h3>
-                <div className="space-y-3 max-h-[520px] overflow-y-auto pr-1">
-                  {equipmentCatalog.map((eq) => (
-                    <div key={eq._id || eq.id} className="flex items-center justify-between border border-slate-100 rounded-xl p-3 hover:border-slate-200 transition bg-slate-50/50">
-                      <div className="flex items-center gap-3">
-                        {eq.photo ? (
-                          <img src={API_URL + eq.photo} alt={eq.name} className="w-12 h-12 rounded-xl object-cover border border-slate-200" />
-                        ) : (
-                          <div className="w-12 h-12 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center">
-                            {React.createElement(categoryIcons[eq.category] || Package, { size: 20 })}
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+                  <h3 className="font-bold text-lg mb-4 flex items-center gap-2 text-slate-800">
+                    <Users size={18} className="text-blue-700" /> Tanımlı Personeller ({staffList.length})
+                  </h3>
+                  <div className="space-y-3 max-h-[480px] overflow-y-auto pr-1">
+                    {staffList.map((s) => (
+                      <div key={s._id || s.id} className="flex items-center justify-between border border-slate-100 rounded-xl p-3.5 bg-slate-50/50 hover:border-slate-200 transition">
+                        <div>
+                          <p className="font-bold text-slate-800 text-sm flex items-center gap-2">
+                            {s.displayName || s.username}
+                            {s.role === 'admin' && <span className="text-[10px] bg-purple-100 text-purple-700 font-bold px-2 py-0.5 rounded-full">Admin</span>}
+                          </p>
+                          <p className="text-xs text-slate-500">@{s.username}</p>
+                        </div>
+                        {s.role !== 'admin' && (
+                          <div className="flex gap-1.5">
+                            <button onClick={() => handleEditStaff(s)} className="p-2 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition" title="Düzenle"><Edit2 size={14} /></button>
+                            <button onClick={() => handleDeleteStaff(s._id || s.id)} className="p-2 bg-rose-50 text-rose-600 rounded-lg hover:bg-rose-100 transition" title="Sil"><Trash2 size={14} /></button>
                           </div>
                         )}
-                        <div>
-                          <p className="font-bold text-slate-800 text-sm">{eq.name}</p>
-                          <p className="text-xs text-slate-500">{eq.category} · Stok: <b>{eq.stock}</b> · {eq.price}</p>
-                        </div>
                       </div>
-                      <div className="flex gap-1.5">
-                        {can('equipmentEdit') && (
-                          <button onClick={() => handleEditEquip(eq)} className="p-2 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition" title="Düzenle"><Edit2 size={14} /></button>
-                        )}
-                        {can('equipmentDelete') && (
-                          <button onClick={() => handleDeleteEquip(eq._id || eq.id)} className="p-2 bg-rose-50 text-rose-600 rounded-lg hover:bg-rose-100 transition" title="Sil"><Trash2 size={14} /></button>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                  {equipmentCatalog.length === 0 && (
-                    <p className="text-slate-400 text-sm text-center py-10">Envanterde henüz ekipman bulunmuyor.</p>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-          {/* PERSONEL: KİRALAMA TALEPLERİ SEKMESİ (GÜNCELLENMİŞ ÇAKIŞMA & ONAY ROZETLERİ) */}
-          {staffSubTab === 'requests' && can('requestsView') && (
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
-              <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-                <h3 className="font-bold text-lg flex items-center gap-2 text-slate-900">
-                  <Bell size={20} className="text-blue-700" /> Gelen Kiralama Talepleri
-                </h3>
-                <span className="text-xs font-semibold bg-slate-100 text-slate-600 px-3 py-1 rounded-full">
-                  Toplam {requests.length} Talep
-                </span>
-              </div>
-
-              <div className="space-y-4">
-                {requests.map((req) => (
-                  <div key={req._id} className={"border rounded-2xl p-4 transition " + (req.status === 'bekliyor' ? 'border-amber-200 bg-amber-50/20' : 'border-slate-200 bg-white')}>
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div className="space-y-1 max-w-xl">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <p className="font-bold text-slate-900 text-base">
-                            {Array.isArray(req.item) ? req.item.join(', ') : req.item}
-                          </p>
-                          {req.conflictIgnored && (
-                            <span className="text-[10px] font-bold bg-rose-100 text-rose-700 border border-rose-300 px-2 py-0.5 rounded-full flex items-center gap-1">
-                              <AlertTriangle size={10} /> Çakışma Göz Ardı Edildi
-                            </span>
-                          )}
-                        </div>
-
-                        <div className="text-xs text-slate-600 flex items-center gap-3 flex-wrap">
-                          <span className="flex items-center gap-1 font-semibold text-slate-700"><Calendar size={13} className="text-blue-600" /> {req.date}</span>
-                          <span className="flex items-center gap-1 font-semibold text-slate-700"><Clock size={13} className="text-blue-600" /> {req.time}</span>
-                          <span className="flex items-center gap-1 font-semibold text-slate-700">
-                            <MapPin size={13} className="text-cyan-600" /> 
-                            {req.location === 'MERKEZDEN_TESLIM' ? (
-                              <span className="text-cyan-700 bg-cyan-50 px-2 py-0.5 rounded font-bold">🏢 Merkezden Kendisi Alacak</span>
-                            ) : (
-                              <span>🚚 {req.location}</span>
-                            )}
-                          </span>
-                        </div>
-
-                        <div className="pt-1 flex items-center gap-4 text-xs text-slate-600 flex-wrap">
-                          <span className="flex items-center gap-1 text-blue-900 font-bold"><User size={13} className="text-blue-600" /> {req.customer}</span>
-                          {req.email && <span className="flex items-center gap-1 text-slate-500"><Mail size={13} /> {req.email}</span>}
-                        </div>
-
-                        {req.notes && (
-                          <p className="text-xs text-slate-500 bg-slate-50 p-2 rounded-lg border border-slate-100 mt-2">
-                            <b>Müşteri Notu:</b> {req.notes}
-                          </p>
-                        )}
-
-                        {req.approvedBy && (
-                          <p className="text-[11px] text-emerald-700 font-medium pt-1">
-                            ✓ <b>{req.approvedBy}</b> tarafından {req.approvedAt ? new Date(req.approvedAt).toLocaleDateString('tr-TR') : ''} tarihinde onaylandı.
-                          </p>
-                        )}
-                      </div>
-
-                      <div className="flex items-center gap-2 self-start md:self-center">
-                       {/* Durum Rozeti */}
-<span className={
-  "text-xs font-bold px-3 py-1.5 rounded-full " +
-  ((req.status?.toLowerCase() === 'onaylandı' || req.status?.toLowerCase() === 'onaylandi') 
-    ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' 
-    : (req.status?.toLowerCase() === 'reddedildi') 
-    ? 'bg-rose-100 text-rose-800 border border-rose-300' 
-    : 'bg-amber-100 text-amber-800 border border-amber-300 animate-pulse')
-}>
-  {req.status?.toLowerCase() === 'onaylandi' || req.status?.toLowerCase() === 'onaylandı' 
-    ? 'Onaylandı' 
-    : req.status?.toLowerCase() === 'reddedildi' 
-    ? 'reddedildi' 
-    : 'bekliyor'}
-</span>
-                        <button onClick={() => downloadRequestAsWord(req)} className="p-2 bg-slate-100 text-slate-700 rounded-xl hover:bg-slate-200 transition" title="Word Sözleşme Formu Olarak İndir">
-                          <FileText size={16} />
-                        </button>
-
-                        {can('requestsManage') && (req.status?.toLowerCase() === 'bekliyor') && (
-  <div className="flex items-center gap-1 border-l border-slate-200 pl-2">
-    <button 
-      onClick={() => updateStatus(req._id || req.id, 'Onaylandı')} 
-      className="px-3 py-1.5 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition flex items-center gap-1 text-xs font-bold shadow-sm"
-      title="Onayla ve E-posta Gönder"
-    >
-      <Check size={14} /> Onayla
-    </button>
-    <button 
-      onClick={() => updateStatus(req._id || req.id, 'Reddedildi')} 
-      className="px-3 py-1.5 bg-rose-50 text-rose-700 rounded-xl hover:bg-rose-100 transition flex items-center gap-1 text-xs font-bold"
-      title="Talebi Reddet"
-    >
-      <X size={14} /> Reddet
-    </button>
-  </div>
-)}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-
-                {requests.length === 0 && (
-                  <p className="text-slate-400 text-sm text-center py-12">Sistemde henüz kayıtlı talep bulunmuyor.</p>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* PERSONEL: PERSONEL YÖNETİMİ (SADECE ADMİN) */}
-          {staffSubTab === 'management' && isAdmin && (
-            <div className="grid md:grid-cols-2 gap-6">
-              <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
-                <h3 className="font-bold text-lg mb-4 flex items-center gap-2 text-slate-800">
-                  {editingStaffId ? <Edit2 size={18} className="text-blue-600" /> : <Plus size={18} className="text-blue-600" />} 
-                  {editingStaffId ? 'Personel Yetkilerini Düzenle' : 'Yeni Personel Tanımla'}
-                </h3>
-                <form onSubmit={handleAddOrUpdateStaff} className="space-y-3">
-                  <div>
-                    <label className="text-xs font-bold text-slate-700">Kullanıcı Adı</label>
-                    <input type="text" required disabled={!!editingStaffId} value={newStaff.username} onChange={(e) => setNewStaff({...newStaff, username: e.target.value})} placeholder="Örn: yusuf" className="w-full mt-1 px-4 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm disabled:bg-slate-100" />
-                  </div>
-                  <div>
-                    <label className="text-xs font-bold text-slate-700">Görünen Ad Soyad</label>
-                    <input type="text" value={newStaff.displayName} onChange={(e) => setNewStaff({...newStaff, displayName: e.target.value})} placeholder="Örn: Yusuf Sarser" className="w-full mt-1 px-4 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm" />
-                  </div>
-                  <div>
-                    <label className="text-xs font-bold text-slate-700">{editingStaffId ? "Yeni Şifre (Boş bırakırsanız değişmez)" : "Giriş Şifresi"}</label>
-                    <input type="password" required={!editingStaffId} value={newStaff.password} onChange={(e) => setNewStaff({...newStaff, password: e.target.value})} placeholder="••••••••" className="w-full mt-1 px-4 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm" />
-                  </div>
-
-                  <div className="border border-slate-200 rounded-xl p-3.5 bg-slate-50">
-                    <p className="text-xs font-bold text-slate-600 mb-2.5 uppercase tracking-wide">Personel Yetki İzinleri</p>
-                    <div className="space-y-2">
-                      {Object.keys(permissionLabels).map((key) => (
-                        <label key={key} className="flex items-center gap-2 text-xs font-medium text-slate-700 cursor-pointer">
-                          <input type="checkbox" checked={!!newStaff.permissions[key]} onChange={() => togglePermission(key)} className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500" />
-                          {permissionLabels[key]}
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-
-                  {staffFormError && <p className="text-rose-600 text-xs font-semibold">{staffFormError}</p>}
-                  <div className="flex gap-2 pt-2">
-                    <button type="submit" className="flex-1 bg-blue-900 text-white font-bold py-2.5 rounded-xl hover:bg-blue-800 transition text-sm shadow">
-                      {editingStaffId ? 'Yetkileri Güncelle' : 'Personeli Kaydet'}
-                    </button>
-                    {editingStaffId && (
-                      <button type="button" onClick={cancelStaffEdit} className="px-4 bg-slate-100 text-slate-700 font-medium rounded-xl hover:bg-slate-200 transition text-sm">
-                        Vazgeç
-                      </button>
+                    ))}
+                    {staffList.length === 0 && (
+                      <p className="text-slate-400 text-sm text-center py-10">Kayıtlı personel bulunmuyor.</p>
                     )}
                   </div>
-                </form>
-              </div>
-
-              <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
-                <h3 className="font-bold text-lg mb-4 flex items-center gap-2 text-slate-800">
-                  <Users size={18} className="text-blue-700" /> Tanımlı Personeller ({staffList.length})
-                </h3>
-                <div className="space-y-3 max-h-[480px] overflow-y-auto pr-1">
-                  {staffList.map((s) => (
-                    <div key={s._id || s.id} className="flex items-center justify-between border border-slate-100 rounded-xl p-3.5 bg-slate-50/50 hover:border-slate-200 transition">
-                      <div>
-                        <p className="font-bold text-slate-800 text-sm flex items-center gap-2">
-                          {s.displayName || s.username}
-                          {s.role === 'admin' && <span className="text-[10px] bg-purple-100 text-purple-700 font-bold px-2 py-0.5 rounded-full">Admin</span>}
-                        </p>
-                        <p className="text-xs text-slate-500">@{s.username}</p>
-                      </div>
-                      {s.role !== 'admin' && (
-                        <div className="flex gap-1.5">
-                          <button onClick={() => handleEditStaff(s)} className="p-2 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition" title="Düzenle"><Edit2 size={14} /></button>
-                          <button onClick={() => handleDeleteStaff(s._id || s.id)} className="p-2 bg-rose-50 text-rose-600 rounded-lg hover:bg-rose-100 transition" title="Sil"><Trash2 size={14} /></button>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                  {staffList.length === 0 && (
-                    <p className="text-slate-400 text-sm text-center py-10">Kayıtlı personel bulunmuyor.</p>
-                  )}
                 </div>
               </div>
-            </div>
-          )}
-        </div>
-      )}
-    </main>
+            )}
+          </div>
+        )}
+      </main>
 
-    <footer className="bg-slate-900 text-slate-400 text-center py-6 text-xs mt-16 border-t border-slate-800">
-      <p className="font-semibold text-slate-300">{COMPANY_DETAILS.name}</p>
-      <p className="mt-1">{COMPANY_DETAILS.address}</p>
-      <p className="mt-2 text-slate-500">© 2026 Aqua Medya. Tüm hakları saklıdır.</p>
-    </footer>
-  </div>
-);
+      <footer className="bg-slate-900 text-slate-400 text-center py-6 text-xs mt-16 border-t border-slate-800">
+        <p className="font-semibold text-slate-300">{COMPANY_DETAILS.name}</p>
+        <p className="mt-1">{COMPANY_DETAILS.address}</p>
+        <p className="mt-2 text-slate-500">© 2026 Aqua Medya. Tüm hakları saklıdır.</p>
+      </footer>
+    </div>
+  );
 }
 
 export default App;
