@@ -48,6 +48,7 @@ function App() {
   const isMemberLoggedIn = !!memberToken;
   const [myRequests, setMyRequests] = useState([]);
   const [myRequestsLoading, setMyRequestsLoading] = useState(false);
+  const [activeCatalogCategory, setActiveCatalogCategory] = useState('Tümü');
 
   // Personel state'leri
   const [staffToken, setStaffToken] = useState(localStorage.getItem('staff_token') || '');
