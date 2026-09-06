@@ -102,18 +102,45 @@ function App() {
     return true;
   });
 
-  // Seçili Dönem İçin Fiyat & KDV Hesaplaması
+   // Seçili Dönem İçin Fiyat & KDV Hesaplaması (Gelişmiş & Esnek Eşleştirme)
   const calculateFinancials = () => {
     let subtotal = 0;
+    
+    // Ekipman havuzunu bul (equipmentCatalog veya equipments hangisi doluysa)
+    const allEquips = (typeof equipmentCatalog !== 'undefined' && equipmentCatalog.length > 0) 
+      ? equipmentCatalog 
+      : (typeof equipments !== 'undefined' ? equipments : []);
+
     filteredRequests.forEach((req) => {
-      // Talepteki her bir ekipmanın fiyatını ekipmanlar listesinden bul
-      const items = Array.isArray(req.item) ? req.item : [req.item];
-      items.forEach((itemName) => {
-        const found = (equipmentCatalog || []).find((eq) => eq.name === itemName);
+      // 1. Durum: Talep nesnesinde doğrudan kayıtlı fiyat veya toplam fiyat varsa
+      if (req.totalPrice && Number(req.totalPrice) > 0) {
+        subtotal += Number(req.totalPrice);
+        return;
+      }
+      if (req.price && Number(req.price) > 0) {
+        subtotal += Number(req.price);
+        return;
+      }
+
+      // 2. Durum: İsimden eşleştirme (Virgülle ayrılmış veya dizi olan tüm ürünleri ayıkla)
+      let rawItems = [];
+      if (Array.isArray(req.item)) {
+        rawItems = req.item;
+      } else if (typeof req.item === 'string') {
+        rawItems = req.item.split(',').map(s => s.trim());
+      }
+
+      rawItems.forEach((singleItemName) => {
+        if (!singleItemName) return;
+        const cleanName = singleItemName.trim().toLowerCase();
+        
+        // Ekipman kataloğundan ismi eşleşen ürünü bul
+        const found = allEquips.find((eq) => 
+          eq.name && eq.name.trim().toLowerCase() === cleanName
+        );
+
         if (found && found.price) {
           subtotal += Number(found.price) || 0;
-        } else if (req.totalPrice) {
-          subtotal += Number(req.totalPrice) || 0;
         }
       });
     });
@@ -124,7 +151,7 @@ function App() {
     return { subtotal, kdv, grandTotal };
   };
 
-  const { subtotal: reportSubtotal, kdv: reportKdv, grandTotal: reportGrandTotal } = calculateFinancials();
+    const { subtotal: reportSubtotal, kdv: reportKdv, grandTotal: reportGrandTotal } = calculateFinancials();
   // Kiralama Formu State'i
   const [deliveryType, setDeliveryType] = useState('MERKEZ');
   const [rentalForm, setRentalForm] = useState({ 
