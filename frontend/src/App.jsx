@@ -28,6 +28,7 @@ const permissionLabels = {
   equipmentDelete: 'Ekipman Silme',
   requestsView: 'Talep Goruntuleme',
   requestsManage: 'Talep Onaylama/Reddetme'
+  viewFinances: 'Finansal Raporları ve Fiyat Toplamlarını Görme' //
 };
 
 const emptyPermissions = { 
@@ -63,7 +64,67 @@ function App() {
 
   const [requests, setRequests] = useState([]);
   const [equipmentCatalog, setEquipmentCatalog] = useState([]);
+  // Talep Dönem Filtresi (all, week, month, year)
+  const [requestPeriod, setRequestPeriod] = useState('all');
 
+  // Talebi Silme Fonksiyonu
+  const deleteRequest = async (requestId) => {
+    if (!window.confirm("Bu kiralama talebini sistemden tamamen silmek istediğinize emin misiniz?")) {
+      return;
+    }
+    try {
+      if (staffToken) {
+        await fetch(`${API_BASE}/api/requests/${requestId}`, {
+          method: 'DELETE',
+          headers: { 'Authorization': `Bearer ${staffToken}` }
+        });
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    // Listeden anında kaldır
+    setRequests(prev => prev.filter(r => (r._id || r.id) !== requestId));
+  };
+
+  // Tarihe Göre Talepleri Filtreleme Mantığı
+  const filteredRequests = requests.filter((req) => {
+    if (requestPeriod === 'all') return true;
+    if (!req.date) return true;
+    
+    const reqDate = new Date(req.date);
+    const now = new Date();
+    const diffTime = Math.abs(now - reqDate);
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+    if (requestPeriod === 'week') return diffDays <= 7;
+    if (requestPeriod === 'month') return diffDays <= 30;
+    if (requestPeriod === 'year') return diffDays <= 365;
+    return true;
+  });
+
+  // Seçili Dönem İçin Fiyat & KDV Hesaplaması
+  const calculateFinancials = () => {
+    let subtotal = 0;
+    filteredRequests.forEach((req) => {
+      // Talepteki her bir ekipmanın fiyatını ekipmanlar listesinden bul
+      const items = Array.isArray(req.item) ? req.item : [req.item];
+      items.forEach((itemName) => {
+        const found = (equipmentCatalog || []).find((eq) => eq.name === itemName);
+        if (found && found.price) {
+          subtotal += Number(found.price) || 0;
+        } else if (req.totalPrice) {
+          subtotal += Number(req.totalPrice) || 0;
+        }
+      });
+    });
+
+    const kdv = subtotal * 0.20; // %20 KDV
+    const grandTotal = subtotal + kdv;
+
+    return { subtotal, kdv, grandTotal };
+  };
+
+  const { subtotal: reportSubtotal, kdv: reportKdv, grandTotal: reportGrandTotal } = calculateFinancials();
   // Kiralama Formu State'i
   const [deliveryType, setDeliveryType] = useState('MERKEZ');
   const [rentalForm, setRentalForm] = useState({ 
@@ -1238,21 +1299,84 @@ function App() {
               </div>
             )}
 
-            {/* PERSONEL: KİRALAMA TALEPLERİ SEKMESİ */}
+                       {/* PERSONEL: KİRALAMA TALEPLERİ SEKMESİ */}
             {staffSubTab === 'requests' && can('requestsView') && (
               <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
-                <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-                  <h3 className="font-bold text-lg flex items-center gap-2 text-slate-900">
-                    <Bell size={20} className="text-blue-700" /> Gelen Kiralama Talepleri
-                  </h3>
-                  <span className="text-xs font-semibold bg-slate-100 text-slate-600 px-3 py-1 rounded-full">
-                    Toplam {requests.length} Talep
-                  </span>
+                
+                {/* BAŞLIK VE DÖNEM FİLTRE BUTONLARI */}
+                <div className="flex items-center justify-between mb-6 flex-wrap gap-4 pb-4 border-b border-slate-100">
+                  <div>
+                    <h3 className="font-bold text-lg flex items-center gap-2 text-slate-900">
+                      <Bell size={20} className="text-blue-700" /> Gelen Kiralama Talepleri
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-0.5">Müşteri rezervasyonlarını ve talep detaylarını yönetin</p>
+                  </div>
+
+                  {/* Haftalık / Aylık / Yıllık Filtreleme Butonları */}
+                  <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl text-xs font-semibold">
+                    <button 
+                      type="button"
+                      onClick={() => setRequestPeriod('all')}
+                      className={"px-3 py-1.5 rounded-lg transition " + (requestPeriod === 'all' ? 'bg-white text-blue-900 shadow-sm' : 'text-slate-600 hover:text-slate-900')}
+                    >
+                      Tümü ({requests.length})
+                    </button>
+                    <button 
+                      type="button"
+                      onClick={() => setRequestPeriod('week')}
+                      className={"px-3 py-1.5 rounded-lg transition " + (requestPeriod === 'week' ? 'bg-white text-blue-900 shadow-sm' : 'text-slate-600 hover:text-slate-900')}
+                    >
+                      Bu Hafta
+                    </button>
+                    <button 
+                      type="button"
+                      onClick={() => setRequestPeriod('month')}
+                      className={"px-3 py-1.5 rounded-lg transition " + (requestPeriod === 'month' ? 'bg-white text-blue-900 shadow-sm' : 'text-slate-600 hover:text-slate-900')}
+                    >
+                      Bu Ay
+                    </button>
+                    <button 
+                      type="button"
+                      onClick={() => setRequestPeriod('year')}
+                      className={"px-3 py-1.5 rounded-lg transition " + (requestPeriod === 'year' ? 'bg-white text-blue-900 shadow-sm' : 'text-slate-600 hover:text-slate-900')}
+                    >
+                      Bu Yıl
+                    </button>
+                  </div>
                 </div>
 
+                {/* FİNANSAL ÖZET KARTI (SADECE ADMİN VEYA viewFinances İZNİ OLAN PERSONELE GÖRÜNÜR) */}
+                {(isAdmin || can('viewFinances')) && (
+                  <div className="mb-6 p-4 bg-gradient-to-r from-slate-900 to-blue-950 rounded-2xl text-white shadow-md">
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-xs font-bold uppercase tracking-wider text-blue-300">
+                        📊 Seçili Dönem Ciro & KDV Özeti ({requestPeriod === 'all' ? 'Tüm Zamanlar' : requestPeriod === 'week' ? 'Son 7 Gün' : requestPeriod === 'month' ? 'Son 30 Gün' : 'Son 1 Yıl'})
+                      </span>
+                      <span className="text-xs bg-blue-800/80 px-2.5 py-1 rounded-lg text-blue-200">
+                        {filteredRequests.length} Adet Talep
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-4 text-center divide-x divide-slate-800">
+                      <div>
+                        <p className="text-[11px] text-slate-400 font-medium">Ara Toplam</p>
+                        <p className="text-base font-bold text-slate-100 mt-0.5">{reportSubtotal.toLocaleString('tr-TR')} ₺</p>
+                      </div>
+                      <div>
+                        <p className="text-[11px] text-slate-400 font-medium">+ %20 KDV</p>
+                        <p className="text-base font-bold text-amber-400 mt-0.5">{reportKdv.toLocaleString('tr-TR')} ₺</p>
+                      </div>
+                      <div>
+                        <p className="text-[11px] text-emerald-400 font-medium">Genel Toplam (KDV Dahil)</p>
+                        <p className="text-lg font-extrabold text-emerald-400 mt-0.5">{reportGrandTotal.toLocaleString('tr-TR')} ₺</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* TALEPLER LİSTESİ */}
                 <div className="space-y-4">
-                  {requests.map((req) => (
-                    <div key={req._id} className={"border rounded-2xl p-4 transition " + (req.status === 'bekliyor' ? 'border-amber-200 bg-amber-50/20' : 'border-slate-200 bg-white')}>
+                  {filteredRequests.map((req) => (
+                    <div key={req._id || req.id} className={"border rounded-2xl p-4 transition " + (req.status === 'bekliyor' ? 'border-amber-200 bg-amber-50/20' : 'border-slate-200 bg-white')}>
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div className="space-y-1 max-w-xl">
                           <div className="flex items-center gap-2 flex-wrap">
@@ -1312,9 +1436,21 @@ function App() {
                               ? 'reddedildi' 
                               : 'bekliyor'}
                           </span>
+                          
                           <button onClick={() => downloadRequestAsWord(req)} className="p-2 bg-slate-100 text-slate-700 rounded-xl hover:bg-slate-200 transition" title="Word Sözleşme Formu Olarak İndir">
                             <FileText size={16} />
                           </button>
+
+                          {/* SİLME BUTONU (SADECE ADMİN) */}
+                          {isAdmin && (
+                            <button 
+                              onClick={() => deleteRequest(req._id || req.id)} 
+                              className="p-2 bg-rose-50 text-rose-600 rounded-xl hover:bg-rose-100 hover:text-rose-700 transition" 
+                              title="Talebi Sistemden Sil"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          )}
 
                           {can('requestsManage') && (req.status?.toLowerCase() === 'bekliyor') && (
                             <div className="flex items-center gap-1 border-l border-slate-200 pl-2">
@@ -1339,8 +1475,8 @@ function App() {
                     </div>
                   ))}
 
-                  {requests.length === 0 && (
-                    <p className="text-slate-400 text-sm text-center py-12">Sistemde henüz kayıtlı talep bulunmuyor.</p>
+                  {filteredRequests.length === 0 && (
+                    <p className="text-slate-400 text-sm text-center py-12">Seçilen dönemde kayıtlı talep bulunmuyor.</p>
                   )}
                 </div>
               </div>
