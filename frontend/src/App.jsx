@@ -594,13 +594,15 @@ function App() {
           </div>
         )}
 
-        {/* KATALOG */}
+               {/* KATALOG */}
         {activeTab === 'catalog' && (
           <div>
             <div className="mb-6 flex items-center justify-between flex-wrap gap-4">
               <div>
-                <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2"><Package className="text-blue-700" /> Ekipman Kataloğu</h2>
-                <p className="text-slate-500 text-sm mt-1">Prodüksiyonunuza uygun ekipmanı seçin ve tek tıkla talep listesine ekleyin.</p>
+                <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
+                  <Package className="text-blue-700" /> Ekipman Kataloğu
+                </h2>
+                <p className="text-slate-500 text-sm mt-1">Prodüksiyonunuza uygun ekipmanı kategoriye göre filtreleyin veya tek tıkla kiralama listesine ekleyin.</p>
               </div>
               {rentalForm.equipment.length > 0 && (
                 <button onClick={() => setActiveTab('rental')} className="bg-cyan-600 hover:bg-cyan-700 text-white font-bold px-5 py-2.5 rounded-xl transition flex items-center gap-2 shadow-md">
@@ -608,54 +610,105 @@ function App() {
                 </button>
               )}
             </div>
-            <div className="grid md:grid-cols-3 gap-6">
-              {equipmentCatalog.map((eq) => {
-                const IconComp = categoryIcons[eq.category] || Package;
-                const isSelected = rentalForm.equipment.includes(eq.name);
+
+            {/* DİNAMİK KATEGORİ FİLTRELEME BUTONLARI (VİTRİN) */}
+            <div className="flex items-center gap-2 overflow-x-auto pb-4 mb-6 scrollbar-thin">
+              {['Tümü', ...Array.from(new Set(equipmentCatalog.map(item => item.category).filter(Boolean)))].map((cat) => {
+                const count = cat === 'Tümü' 
+                  ? equipmentCatalog.length 
+                  : equipmentCatalog.filter(e => e.category === cat).length;
+                const isActive = activeCatalogCategory === cat;
+                const IconComp = categoryIcons[cat] || Package;
+
                 return (
-                  <div key={eq._id || eq.id} className={"bg-white rounded-2xl shadow-sm border transition overflow-hidden flex flex-col justify-between " + (isSelected ? 'border-cyan-500 ring-2 ring-cyan-200' : 'border-slate-200 hover:shadow-md')}>
-                    <div>
-                      <div className="bg-slate-100 h-40 flex items-center justify-center overflow-hidden relative">
-                        {eq.photo ? (
-                          <img src={API_URL + eq.photo} alt={eq.name} className="w-full h-full object-cover" />
-                        ) : (
-                          <IconComp className="text-slate-400" size={54} />
-                        )}
-                        <span className="absolute top-3 left-3 text-[11px] font-bold text-blue-800 bg-white/90 backdrop-blur-sm px-2.5 py-1 rounded-full shadow-sm">
-                          {eq.category}
-                        </span>
-                      </div>
-                      <div className="p-5">
-                        <div className="flex justify-between items-start mb-2">
-                          <h3 className="font-bold text-slate-800 text-base">{eq.name}</h3>
-                          <span className="flex items-center gap-1 text-xs text-amber-600 font-semibold bg-amber-50 px-2 py-0.5 rounded"><Star size={12} fill="currentColor" /> {eq.rating || 4.5}</span>
-                        </div>
-                        <p className={"text-xs font-semibold mb-3 " + (eq.stock > 0 ? 'text-emerald-600' : 'text-rose-500')}>
-                          {eq.stock > 0 ? `Stokta: ${eq.stock} adet` : 'Stok Tükendi'}
-                        </p>
-                        <ul className="text-xs text-slate-600 space-y-1 mb-4">
-                          {(eq.specs || []).map((spec, i) => (
-                            <li key={i} className="flex items-start gap-1.5"><CheckCircle size={13} className="text-cyan-600 mt-0.5 shrink-0" />{spec}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    </div>
-                    <div className="p-5 pt-0 flex items-center justify-between border-t border-slate-100 mt-2">
-                      <span className="font-bold text-blue-900 text-sm">{eq.price}</span>
-                      <button 
-                        onClick={() => handleRentClick(eq.name)} 
-                        disabled={eq.stock === 0} 
-                        className={"text-xs font-bold px-4 py-2 rounded-xl transition flex items-center gap-1 " + 
-                          (eq.stock === 0 ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 
-                          (isSelected ? 'bg-emerald-600 text-white' : 'bg-cyan-600 text-white hover:bg-cyan-700'))}
-                      >
-                        {isSelected ? <><Check size={14} /> Seçildi</> : 'Sepete Ekle'}
-                      </button>
-                    </div>
-                  </div>
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => setActiveCatalogCategory(cat)}
+                    className={`px-4 py-2 rounded-xl text-xs md:text-sm font-bold whitespace-nowrap transition flex items-center gap-2 border ${
+                      isActive 
+                        ? 'bg-blue-900 text-white border-blue-900 shadow' 
+                        : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:border-slate-300'
+                    }`}
+                  >
+                    {cat !== 'Tümü' && <IconComp size={15} className={isActive ? 'text-cyan-300' : 'text-slate-500'} />}
+                    <span>{cat}</span>
+                    <span className={`text-[11px] px-1.5 py-0.2 rounded-full ${
+                      isActive ? 'bg-blue-800 text-white' : 'bg-slate-100 text-slate-500'
+                    }`}>
+                      {count}
+                    </span>
+                  </button>
                 );
               })}
             </div>
+
+            {/* FİLTRELENMİŞ EKİPMAN KARTLARI */}
+            <div className="grid md:grid-cols-3 gap-6">
+              {equipmentCatalog
+                .filter((eq) => activeCatalogCategory === 'Tümü' || eq.category === activeCatalogCategory)
+                .map((eq) => {
+                  const IconComp = categoryIcons[eq.category] || Package;
+                  const isSelected = rentalForm.equipment.includes(eq.name);
+                  return (
+                    <div key={eq._id || eq.id} className={"bg-white rounded-2xl shadow-sm border transition overflow-hidden flex flex-col justify-between " + (isSelected ? 'border-cyan-500 ring-2 ring-cyan-200' : 'border-slate-200 hover:shadow-md')}>
+                      <div>
+                        <div className="bg-slate-100 h-44 flex items-center justify-center overflow-hidden relative">
+                          {eq.photo ? (
+                            <img src={API_URL + eq.photo} alt={eq.name} className="w-full h-full object-cover" />
+                          ) : (
+                            <IconComp className="text-slate-400" size={54} />
+                          )}
+                          <span className="absolute top-3 left-3 text-[11px] font-bold text-blue-900 bg-white/95 backdrop-blur-sm px-2.5 py-1 rounded-full shadow-sm border border-slate-100">
+                            {eq.category}
+                          </span>
+                        </div>
+                        <div className="p-5">
+                          <div className="flex justify-between items-start mb-2">
+                            <h3 className="font-bold text-slate-800 text-base">{eq.name}</h3>
+                            <span className="flex items-center gap-1 text-xs text-amber-600 font-semibold bg-amber-50 px-2 py-0.5 rounded">
+                              <Star size={12} fill="currentColor" /> {eq.rating || 4.8}
+                            </span>
+                          </div>
+                          <p className={"text-xs font-semibold mb-3 " + (eq.stock > 0 ? 'text-emerald-600' : 'text-rose-500')}>
+                            {eq.stock > 0 ? `Stokta: ${eq.stock} adet mevcut` : 'Geçici Olarak Stokta Yok'}
+                          </p>
+                          <ul className="text-xs text-slate-600 space-y-1 mb-4">
+                            {(eq.specs || []).map((spec, i) => (
+                              <li key={i} className="flex items-start gap-1.5">
+                                <CheckCircle size={13} className="text-cyan-600 mt-0.5 shrink-0" />{spec}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      </div>
+                      <div className="p-5 pt-0 flex items-center justify-between border-t border-slate-100 mt-2">
+                        <span className="font-bold text-blue-900 text-sm">{eq.price}</span>
+                        <button 
+                          onClick={() => handleRentClick(eq.name)} 
+                          disabled={eq.stock === 0} 
+                          className={"text-xs font-bold px-4 py-2 rounded-xl transition flex items-center gap-1 " + 
+                            (eq.stock === 0 ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 
+                            (isSelected ? 'bg-emerald-600 text-white' : 'bg-cyan-600 text-white hover:bg-cyan-700'))}
+                        >
+                          {isSelected ? <><Check size={14} /> Seçildi</> : 'Sepete Ekle'}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+
+            {/* SEÇİLİ KATEGORİDE ÜRÜN YOKSA */}
+            {equipmentCatalog.filter((eq) => activeCatalogCategory === 'Tümü' || eq.category === activeCatalogCategory).length === 0 && (
+              <div className="text-center py-16 bg-white rounded-2xl border border-slate-200 mt-4">
+                <Package className="mx-auto text-slate-300 mb-2" size={40} />
+                <p className="text-slate-500 font-medium">"{activeCatalogCategory}" kategorisinde henüz ekipman bulunmuyor.</p>
+                <button onClick={() => setActiveCatalogCategory('Tümü')} className="mt-3 text-xs text-blue-600 font-bold hover:underline">
+                  Tüm Ekipmanları Göster
+                </button>
+              </div>
+            )}
           </div>
         )}
 
