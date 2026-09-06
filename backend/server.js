@@ -70,9 +70,10 @@ function requirePermission(permKey) {
 app.post('/api/staff/login', async (req, res) => {
   const { username, password } = req.body;
   try {
-    const staff = await Staff.findOne({ username, password });
+        const staff = await Staff.findOne({ username });
     if (!staff) return res.status(401).json({ error: 'Kullanıcı adı veya şifre hatalı' });
-
+    const ok = await staff.comparePassword(password);
+    if (!ok) return res.status(401).json({ error: 'Kullanıcı adı veya şifre hatalı' });
     const permissions = staff.role === 'admin'
       ? { equipmentView: true, equipmentAdd: true, equipmentEdit: true, equipmentDelete: true, requestsView: true, requestsManage: true }
       : staff.permissions;
@@ -193,9 +194,10 @@ app.post('/api/member/register', async (req, res) => {
 app.post('/api/member/login', async (req, res) => {
   const { phone, password } = req.body;
   try {
-    const member = await Member.findOne({ phone, password });
+       const member = await Member.findOne({ phone });
     if (!member) return res.status(401).json({ error: 'Telefon numarası veya şifre hatalı' });
-
+    const ok = await member.comparePassword(password);
+    if (!ok) return res.status(401).json({ error: 'Telefon numarası veya şifre hatalı' });
     const token = jwt.sign(
       { id: member._id, phone: member.phone, name: member.name, email: member.email, type: 'member' },
       JWT_SECRET, { expiresIn: '30d' }
