@@ -764,7 +764,7 @@ function App() {
               })}
             </div>
 
-            {/* FİLTRELENMİŞ EKİPMAN KARTLARI */}
+                       {/* FİLTRELENMİŞ EKİPMAN KARTLARI */}
             <div className="grid md:grid-cols-3 gap-6">
               {equipmentCatalog
                 .filter((eq) => activeCatalogCategory === 'Tümü' || eq.category === activeCatalogCategory)
@@ -803,17 +803,9 @@ function App() {
                           </ul>
                         </div>
                       </div>
-                      <div className="p-5 pt-0 flex items-center justify-between border-t border-slate-100 mt-2">
-                        <span className="font-bold text-blue-900 text-sm">{eq.price}</span>
-                        <button 
-                          onClick={() => handleRentClick(eq.name)} 
-                          disabled={eq.stock === 0} 
-                          className={"text-xs font-bold px-4 py-2 rounded-xl transition flex items-center gap-1 " + 
-                            (eq.stock === 0 ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 
-                            (isSelected ? 'bg-emerald-600 text-white' : 'bg-cyan-600 text-white hover:bg-cyan-700'))}
-                        >                      {/* VİDEO VE KİRALAMA ALANI */}
-                      <div className="p-5 pt-0 border-t border-slate-100 mt-2 flex flex-col gap-3">
-                        {/* YOUTUBE TANITIM BUTONU */}
+
+                      {/* KART ALTI: VİDEO VE KİRALAMA ALANI */}
+                      <div className="p-5 pt-3 border-t border-slate-100 mt-auto bg-slate-50/50 flex flex-col gap-3">
                         {(eq.videoUrl || eq.youtubeUrl) && (
                           <button
                             type="button"
@@ -821,30 +813,31 @@ function App() {
                               title: eq.name,
                               url: getEmbedYoutubeUrl(eq.videoUrl || eq.youtubeUrl)
                             })}
-                            className="inline-flex items-center justify-center gap-1.5 w-full py-2 px-3 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-xl text-xs font-bold transition border border-rose-200 shadow-sm"
+                            className="inline-flex items-center justify-center gap-2 w-full py-2 px-3 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-xl text-xs font-semibold transition border border-rose-200 shadow-sm"
                           >
-                            <svg className="w-4 h-4 fill-current text-rose-600" viewBox="0 0 24 24">
+                            <svg className="w-4 h-4 fill-current text-rose-600 shrink-0" viewBox="0 0 24 24">
                               <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
                             </svg>
-                            Tanıtım Videosunu İzle ▶
+                            Tanıtım Videosunu İzle
                           </button>
                         )}
 
                         <div className="flex items-center justify-between">
-                          <span className="font-bold text-blue-900 text-sm">{eq.price}</span>
+                          <div>
+                            <span className="text-[11px] text-slate-400 block font-medium">Günlük Kiralama</span>
+                            <span className="font-extrabold text-slate-800 text-base">{eq.price}</span>
+                          </div>
                           <button 
+                            type="button"
                             onClick={() => handleRentClick(eq.name)} 
                             disabled={eq.stock === 0} 
-                            className={"text-xs font-bold px-4 py-2 rounded-xl transition flex items-center gap-1 " + 
+                            className={"text-xs font-bold px-4 py-2.5 rounded-xl transition flex items-center gap-1.5 shadow-sm " + 
                               (eq.stock === 0 ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 
-                              (isSelected ? 'bg-emerald-600 text-white' : 'bg-cyan-600 text-white hover:bg-cyan-700'))}
+                              (isSelected ? 'bg-emerald-600 text-white shadow-emerald-200' : 'bg-cyan-600 text-white hover:bg-cyan-700 shadow-cyan-100'))}
                           >
                             {isSelected ? <><Check size={14} /> Seçildi</> : 'Sepete Ekle'}
                           </button>
                         </div>
-                      </div>
-                          {isSelected ? <><Check size={14} /> Seçildi</> : 'Sepete Ekle'}
-                        </button>
                       </div>
                     </div>
                   );
