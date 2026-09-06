@@ -5,8 +5,9 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const jwt = require('jsonwebtoken');
-const Member = require('./models/Members');
+const nodemailer = require('nodemailer');
 
+const Member = require('./models/Members');
 const connectDB = require('./db');
 const Equipment = require('./models/Equipment');
 const Request = require('./models/Request');
@@ -15,6 +16,101 @@ const Staff = require('./models/Staff');
 const app = express();
 const PORT = process.env.PORT || 4000;
 const JWT_SECRET = process.env.JWT_SECRET || 'gizli_anahtar';
+
+// --- ŞİRKET BİLGİLERİ (SABİT) ---
+const COMPANY_INFO = {
+  name: 'AQUA MEDYA TİCARET LİMİTED ŞİRKETİ',
+  address: 'Merkez Mahallesi Seçkin Sokak Z Ofis A Blok No:2-4/90 Kağıthane / İSTANBUL',
+  email: 'info@aquamedya.com.tr',
+  phone: '0 212 325 25 25',
+  mobile: '0 532 011 01 01'
+};
+
+// --- GÜVENLİ NODEMAILER YAPILANDIRMASI ---
+let transporter = null;
+if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
+  transporter = nodemailer.createTransport({
+    host: process.env.EMAIL_HOST || 'smtp.gmail.com',
+    port: parseInt(process.env.EMAIL_PORT) || 465,
+    secure: process.env.EMAIL_SECURE === 'true',
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASS
+    }
+  });
+}
+
+async function sendApprovalEmail(requestData, approverName) {
+  if (!requestData.email) return;
+
+  const itemsHtml = Array.isArray(requestData.item)
+    ? requestData.item.map(i => `<li><b>${i}</b></li>`).join('')
+    : `<li><b>${requestData.item}</b></li>`;
+
+  const deliveryText = requestData.location === 'MERKEZDEN_TESLIM'
+    ? '<b>Merkezden Kendim Alacağım</b> (Ofis Adresimizden teslim alabilirsiniz)'
+    : (requestData.location || 'Belirtilmedi');
+
+  // Mail sunucusu yoksa güvenli modda log yazıp geç
+  if (!transporter) {
+    console.log('--------------------------------------------------');
+    console.log(`[BİLGİ] (Güvenli Mod) Mail sunucusu henüz tanımlı değil.`);
+    console.log(`[SİMÜLASYON] Müşteriye (${requestData.email}) onay bildirimi hazırlandı:`);
+    console.log(`Onaylayan Yetkili: ${approverName}`);
+    console.log(`Ekipmanlar: ${Array.isArray(requestData.item) ? requestData.item.join(', ') : requestData.item}`);
+    console.log(`Teslimat Yeri: ${deliveryText}`);
+    console.log('--------------------------------------------------');
+    return;
+  }
+
+  const mailOptions = {
+    from: `"${COMPANY_INFO.name}" <${process.env.EMAIL_USER}>`,
+    to: requestData.email,
+    subject: `Kiralama Talebiniz Onaylandı - Rezervasyon #${requestData._id.toString().slice(-6).toUpperCase()}`,
+    html: `
+      <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 650px; margin: auto; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden;">
+        <div style="background-color: #0f172a; color: #ffffff; padding: 25px; text-align: center;">
+          <h2 style="margin: 0; font-size: 24px; letter-spacing: 1px;">AQUA MEDYA</h2>
+          <p style="margin: 5px 0 0 0; font-size: 14px; opacity: 0.8;">Ekipman Kiralama & Prodüksiyon</p>
+        </div>
+        <div style="padding: 30px;">
+          <h3 style="color: #10b981; margin-top: 0;">Sayın ${requestData.customer},</h3>
+          <p>Kiralama talebiniz incelenmiş ve yetkilimiz tarafından <b>onaylanmıştır</b>.</p>
+          
+          <div style="background: #f8fafc; border-left: 4px solid #0ea5e9; padding: 15px; margin: 20px 0;">
+            <p style="margin: 0 0 10px 0;"><b>Rezervasyon Detayları:</b></p>
+            <ul style="margin: 0; padding-left: 20px;">
+              ${itemsHtml}
+            </ul>
+            <p style="margin: 10px 0 0 0;"><b>Tarih / Saat:</b> ${requestData.date || '-'} / ${requestData.time || '-'}</p>
+            <p style="margin: 5px 0 0 0;"><b>Teslimat Şekli:</b> ${deliveryText}</p>
+            <p style="margin: 5px 0 0 0;"><b>Talebi Onaylayan Yetkili:</b> ${approverName}</p>
+          </div>
+
+          <p style="font-size: 13px; color: #64748b;">
+            Ekipmanların teslim alınması esnasında geçerli bir kimlik belgesi ibraz edilmesi gerekmektedir. İhtiyaç halinde aşağıdaki iletişim kanallarımızdan bize ulaşabilirsiniz.
+          </p>
+
+          <hr style="border: none; border-top: 1px solid #eee; margin: 25px 0;" />
+
+          <div style="font-size: 13px; color: #475569;">
+            <p style="margin: 3px 0;"><b>${COMPANY_INFO.name}</b></p>
+            <p style="margin: 3px 0;">📍 <b>Adres:</b> ${COMPANY_INFO.address}</p>
+            <p style="margin: 3px 0;">📞 <b>Telefon:</b> ${COMPANY_INFO.phone} | 📱 <b>Cep:</b> ${COMPANY_INFO.mobile}</p>
+            <p style="margin: 3px 0;">✉️ <b>E-Posta:</b> ${COMPANY_INFO.email}</p>
+          </div>
+        </div>
+      </div>
+    `
+  };
+
+  try {
+    await transporter.sendMail(mailOptions);
+    console.log(`[BAŞARILI] Onay maili ${requestData.email} adresine iletildi.`);
+  } catch (err) {
+    console.error('[HATA] Mail gönderilemedi:', err.message);
+  }
+}
 
 app.use(cors());
 app.use(express.json());
@@ -65,12 +161,25 @@ function requirePermission(permKey) {
   };
 }
 
+function memberAuthMiddleware(req, res, next) {
+  const token = req.headers['authorization']?.split(' ')[1];
+  if (!token) return res.status(401).json({ error: 'Talep göndermek için üye girişi yapmalısınız' });
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    if (decoded.type !== 'member') return res.status(403).json({ error: 'Geçersiz erişim' });
+    req.member = decoded;
+    next();
+  } catch (e) {
+    return res.status(401).json({ error: 'Oturum süresi dolmuş, lütfen tekrar giriş yapın' });
+  }
+}
+
 // --- ROUTES ---
 
 app.post('/api/staff/login', async (req, res) => {
   const { username, password } = req.body;
   try {
-        const staff = await Staff.findOne({ username });
+    const staff = await Staff.findOne({ username });
     if (!staff) return res.status(401).json({ error: 'Kullanıcı adı veya şifre hatalı' });
     const ok = await staff.comparePassword(password);
     if (!ok) return res.status(401).json({ error: 'Kullanıcı adı veya şifre hatalı' });
@@ -134,6 +243,7 @@ app.delete('/api/equipment/:id', authMiddleware, requirePermission('equipmentDel
   res.json({ success: true });
 });
 
+// --- TALEP ROUTES ---
 app.post('/api/requests', memberAuthMiddleware, async (req, res) => {
   const { item, date, time, location, notes } = req.body;
   const newRequest = await Request.create({
@@ -144,6 +254,7 @@ app.post('/api/requests', memberAuthMiddleware, async (req, res) => {
   });
   res.json(newRequest);
 });
+
 app.get('/api/requests/mine', memberAuthMiddleware, async (req, res) => {
   try {
     const myRequests = await Request.find({ email: req.member.email }).sort({ _id: -1 });
@@ -152,18 +263,71 @@ app.get('/api/requests/mine', memberAuthMiddleware, async (req, res) => {
     res.status(500).json({ error: 'Talepler alınamadı' });
   }
 });
-function memberAuthMiddleware(req, res, next) {
-  const token = req.headers['authorization']?.split(' ')[1];
-  if (!token) return res.status(401).json({ error: 'Talep göndermek için üye girişi yapmalısınız' });
+
+app.get('/api/requests', authMiddleware, requirePermission('requestsView'), async (req, res) => {
+  const list = await Request.find().sort({ _id: -1 });
+  res.json(list);
+});
+
+// --- TALEP DURUMU GÜNCELLEME (ÇAKIŞMA VE 2 KADEMELİ ONAY) ---
+app.put('/api/requests/:id', authMiddleware, requirePermission('requestsManage'), async (req, res) => {
+  const { status, force } = req.body;
+  const requestId = req.params.id;
+
   try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-    if (decoded.type !== 'member') return res.status(403).json({ error: 'Geçersiz erişim' });
-    req.member = decoded;
-    next();
-  } catch (e) {
-    return res.status(401).json({ error: 'Oturum süresi dolmuş, lütfen tekrar giriş yapın' });
+    const currentReq = await Request.findById(requestId);
+    if (!currentReq) return res.status(404).json({ error: 'Talep bulunamadı' });
+
+    // Sadece 'Onaylandı' yapılırken çakışma kontrolü
+    if (status === 'Onaylandı') {
+      const itemsToCheck = Array.isArray(currentReq.item) ? currentReq.item : [currentReq.item];
+
+      // Aynı tarih ve saatte onaylanmış başka talep var mı?
+      const conflictingRequest = await Request.findOne({
+        _id: { $ne: requestId },
+        status: 'Onaylandı',
+        date: currentReq.date,
+        time: currentReq.time,
+        item: { $in: itemsToCheck }
+      });
+
+      // Çakışma var ve personel henüz zorlamadıysa uyar
+      if (conflictingRequest && !force) {
+        const conflictingItems = conflictingRequest.item.filter(it => itemsToCheck.includes(it));
+        return res.status(409).json({
+          conflict: true,
+          message: 'Aynı tarih ve saatte bu ekipman için zaten onaylı bir rezervasyon var!',
+          conflictingCustomer: conflictingRequest.customer,
+          conflictingItems,
+          date: currentReq.date,
+          time: currentReq.time
+        });
+      }
+    }
+
+    const approverName = req.user.displayName || req.user.username || 'Yetkili';
+    currentReq.status = status;
+
+    if (status === 'Onaylandı') {
+      currentReq.approvedBy = approverName;
+      currentReq.approvedAt = new Date();
+      if (force) currentReq.conflictIgnored = true;
+    }
+
+    await currentReq.save();
+
+    // Onaylandıysa e-posta gönderimini tetikle (asenkron)
+    if (status === 'Onaylandı') {
+      sendApprovalEmail(currentReq, approverName);
+    }
+
+    res.json(currentReq);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Talep güncellenirken bir hata oluştu' });
   }
-}
+});
+
 // --- ÜYELİK ROUTE'LARI ---
 app.post('/api/member/register', async (req, res) => {
   const { name, phone, email, password } = req.body;
@@ -194,7 +358,7 @@ app.post('/api/member/register', async (req, res) => {
 app.post('/api/member/login', async (req, res) => {
   const { phone, password } = req.body;
   try {
-       const member = await Member.findOne({ phone });
+    const member = await Member.findOne({ phone });
     if (!member) return res.status(401).json({ error: 'Telefon numarası veya şifre hatalı' });
     const ok = await member.comparePassword(password);
     if (!ok) return res.status(401).json({ error: 'Telefon numarası veya şifre hatalı' });
@@ -208,19 +372,7 @@ app.post('/api/member/login', async (req, res) => {
   }
 });
 
-app.get('/api/requests', authMiddleware, requirePermission('requestsView'), async (req, res) => {
-  const list = await Request.find();
-  res.json(list);
-});
-
-app.put('/api/requests/:id', authMiddleware, requirePermission('requestsManage'), async (req, res) => {
-  const { status } = req.body;
-  const updated = await Request.findByIdAndUpdate(req.params.id, { status }, { new: true });
-  res.json(updated);
-});
-
-// --- PERSONEL YÖNETİMİ (sadece admin) ---
-
+// --- PERSONEL YÖNETİMİ ---
 app.get('/api/staff', authMiddleware, adminOnly, async (req, res) => {
   const list = await Staff.find().select('-password');
   res.json(list);
@@ -268,7 +420,6 @@ app.get('/', (req, res) => {
   res.send('Aqua Medya Backend API çalışıyor.');
 });
 
-// --- Sunucuyu MongoDB'ye bağlandıktan sonra başlat ---
 connectDB().then(() => {
   app.listen(PORT, () => {
     console.log(`✅ Aqua Medya Backend http://localhost:${PORT} üzerinde çalışıyor`);

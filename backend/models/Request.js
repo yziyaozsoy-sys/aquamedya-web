@@ -8,7 +8,11 @@ const requestSchema = new mongoose.Schema({
   customer: String,
   email: String,
   notes: String,
-  status: { type: String, default: 'Bekliyor' }
-  }, { timestamps: true });
+  status: { type: String, default: 'Bekliyor' },
+  // Onay Takibi ve Çakışma Yönetimi
+  approvedBy: { type: String, default: null },
+  approvedAt: { type: Date, default: null },
+  conflictIgnored: { type: Boolean, default: false }
+}, { timestamps: true });
 
 module.exports = mongoose.model('Request', requestSchema);
