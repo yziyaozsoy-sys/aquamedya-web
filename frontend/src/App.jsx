@@ -73,7 +73,9 @@ function App() {
     notes: '' 
   });
   const [showSuccess, setShowSuccess] = useState(false);
-
+  const [customCategory, setCustomCategory] = useState('');
+  const [isNewCategory, setIsNewCategory] = useState(false);
+  const [currency, setCurrency] = useState('₺'); // '₺', '$', '€'
   // 2 Kademeli Çakışma Uyarı Modalı State'i
   const [conflictModal, setConflictModal] = useState({
     isOpen: false,
@@ -325,18 +327,25 @@ function App() {
       setNewEquip({ ...newEquip, photoFile: file, photoPreview: URL.createObjectURL(file) });
     }
   };
-
   const handleAddOrUpdateEquip = async (e) => {
     e.preventDefault();
     const specsArr = newEquip.specsText.split('\n').map(s => s.trim()).filter(s => s);
 
+    // Dinamik Kategori Kontrolü
+    const finalCategory = (isNewCategory && customCategory.trim()) 
+      ? customCategory.trim() 
+      : newEquip.category;
+
+    // Otomatik Para Birimi ve / Gün Standartı: "2500 ₺ / Gün"
+    const finalPrice = `${newEquip.price} ${currency} / Gün`;
+
     const formData = new FormData();
     formData.append('name', newEquip.name);
-    formData.append('category', newEquip.category);
-    formData.append('price', newEquip.price);
+    formData.append('category', finalCategory);
+    formData.append('price', finalPrice);
     formData.append('stock', newEquip.stock);
     formData.append('specs', JSON.stringify(specsArr));
-    formData.append('videoUrl', newEquip.videoUrl);
+    formData.append('videoUrl', newEquip.videoUrl || '');
     if (newEquip.photoFile) formData.append('photo', newEquip.photoFile);
 
     try {
@@ -351,37 +360,64 @@ function App() {
         });
       }
       setNewEquip(emptyNewEquip);
+      setIsNewCategory(false);
+      setCustomCategory('');
       fetchEquipment();
     } catch (e) {
-      alert('Islem basarisiz. Yetkiniz olmayabilir.');
+      alert('İşlem başarısız. Yetkiniz olmayabilir.');
     }
   };
 
   const handleEditEquip = (eq) => {
     if (!can('equipmentEdit')) return;
     setEditingId(eq._id || eq.id);
+
+    // Fiyattan sadece rakamı ve seçili para birimini ayıkla
+    const rawPrice = eq.price ? eq.price.replace(/[^0-9.,]/g, '').trim() : '';
+    const detectedCurrency = eq.price?.includes('$') ? '$' : eq.price?.includes('€') ? '€' : '₺';
+    setCurrency(detectedCurrency);
+
+    // Kategori kontrolü (Özel bir kategoriyse kutuyu aç)
+    const standardCategories = ['Kamera', 'Lens & Objektif', 'Işık & Aydınlatma', 'Ses Sistemleri', 'Gimbal & Stabilizasyon', 'Hava Çekimi & Drone', 'Monitör & Reji', 'Stüdyo Ekipmanları', 'Diğer'];
+    if (eq.category && !standardCategories.includes(eq.category)) {
+      setIsNewCategory(true);
+      setCustomCategory(eq.category);
+    } else {
+      setIsNewCategory(false);
+      setCustomCategory('');
+    }
+
     setNewEquip({
-      name: eq.name, category: eq.category, specsText: (eq.specs || []).join('\n'),
-      price: eq.price, stock: eq.stock, photoFile: null,
-      photoPreview: eq.photo ? (API_URL + eq.photo) : null, videoUrl: eq.videoUrl || ''
+      name: eq.name, 
+      category: eq.category || 'Kamera', 
+      specsText: (eq.specs || []).join('\n'),
+      price: rawPrice, 
+      stock: eq.stock, 
+      photoFile: null,
+      photoPreview: eq.photo ? (API_URL + eq.photo) : null, 
+      videoUrl: eq.videoUrl || ''
     });
   };
 
   const handleDeleteEquip = async (id) => {
     if (!can('equipmentDelete')) return;
-    if (!confirm('Bu ekipmani silmek istediginize emin misiniz?')) return;
+    if (!confirm('Bu ekipmanı silmek istediğinize emin misiniz?')) return;
     try {
       await axios.delete(API_URL + '/api/equipment/' + id, authHeader);
       fetchEquipment();
-    } catch (e) { alert('Silme basarisiz.'); }
+    } catch (e) { alert('Silme başarısız.'); }
   };
 
-  const cancelEdit = () => { setEditingId(null); setNewEquip(emptyNewEquip); };
+  const cancelEdit = () => { 
+    setEditingId(null); 
+    setNewEquip(emptyNewEquip); 
+    setIsNewCategory(false);
+    setCustomCategory('');
+  };
 
   const togglePermission = (key) => {
     setNewStaff(prev => ({ ...prev, permissions: { ...prev.permissions, [key]: !prev.permissions[key] } }));
   };
-
   const handleAddOrUpdateStaff = async (e) => {
     e.preventDefault();
     setStaffFormError('');
@@ -921,30 +957,90 @@ function App() {
                       <label className="text-xs font-bold text-slate-700">Ekipman Adı</label>
                       <input type="text" required value={newEquip.name} onChange={(e) => setNewEquip({...newEquip, name: e.target.value})} placeholder="Örn: Sony FX3 Sinema Kamerası" className="w-full mt-1 px-4 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm" />
                     </div>
+
+                    {/* DİNAMİK KATEGORİ SEÇİMİ VE YENİ KATEGORİ ALANI */}
                     <div>
                       <label className="text-xs font-bold text-slate-700">Kategori</label>
-                      <select value={newEquip.category} onChange={(e) => setNewEquip({...newEquip, category: e.target.value})} className="w-full mt-1 px-4 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm bg-white">
-                        {Object.keys(categoryIcons).map((cat) => <option key={cat} value={cat}>{cat}</option>)}
-                      </select>
+                      <div className="space-y-2 mt-1">
+                        <select 
+                          value={isNewCategory ? '__new__' : newEquip.category} 
+                          onChange={(e) => {
+                            if (e.target.value === '__new__') {
+                              setIsNewCategory(true);
+                            } else {
+                              setIsNewCategory(false);
+                              setNewEquip({...newEquip, category: e.target.value});
+                            }
+                          }} 
+                          className="w-full px-4 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm bg-white"
+                        >
+                          {Object.keys(categoryIcons).map((cat) => (
+                            <option key={cat} value={cat}>{cat}</option>
+                          ))}
+                          <option value="__new__" className="font-bold text-blue-700">+ Yeni Kategori Ekle...</option>
+                        </select>
+
+                        {isNewCategory && (
+                          <input 
+                            type="text" 
+                            required 
+                            autoFocus 
+                            placeholder="Yeni Kategori Adını Yazın..." 
+                            value={customCategory} 
+                            onChange={(e) => setCustomCategory(e.target.value)} 
+                            className="w-full px-4 py-2 border-2 border-blue-600 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm bg-white" 
+                          />
+                        )}
+                      </div>
                     </div>
+
                     <div>
                       <label className="text-xs font-bold text-slate-700">Teknik Özellikler (Her satıra bir özellik)</label>
                       <textarea value={newEquip.specsText} onChange={(e) => setNewEquip({...newEquip, specsText: e.target.value})} placeholder="4K 120fps Kayıt&#10;Dual Base ISO&#10;Full Frame Sensör" rows={3} className="w-full mt-1 px-4 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm"></textarea>
                     </div>
+
+                    {/* GÜNLÜK KİRALAMA BEDELİ (PARA BİRİMİ + / GÜN) & STOK ADEDİ */}
                     <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <label className="text-xs font-bold text-slate-700">Fiyat / Periyot</label>
-                        <input type="text" required value={newEquip.price} onChange={(e) => setNewEquip({...newEquip, price: e.target.value})} placeholder="Örn: 2.500 TL / Gün" className="w-full mt-1 px-4 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm" />
+                        <label className="text-xs font-bold text-slate-700">Günlük Kiralama Bedeli</label>
+                        <div className="flex items-center gap-1.5 mt-1">
+                          <select
+                            value={currency}
+                            onChange={(e) => setCurrency(e.target.value)}
+                            className="px-2.5 py-2 border border-slate-300 rounded-xl text-xs font-bold text-slate-800 bg-slate-50 outline-none cursor-pointer"
+                          >
+                            <option value="₺">₺ (TL)</option>
+                            <option value="$">$ (USD)</option>
+                            <option value="€">€ (EUR)</option>
+                          </select>
+                          <input 
+                            type="number" 
+                            required 
+                            value={newEquip.price} 
+                            onChange={(e) => setNewEquip({...newEquip, price: e.target.value})} 
+                            placeholder="2500" 
+                            className="w-full min-w-0 px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm font-semibold" 
+                          />
+                          <span className="px-2.5 py-2 bg-slate-100 border border-slate-200 text-slate-500 rounded-xl text-xs font-bold whitespace-nowrap">
+                            / Gün
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-slate-400 mt-1">
+                          Kayıt: <span className="font-bold text-blue-900">{newEquip.price || '0'} {currency} / Gün</span>
+                        </p>
                       </div>
+
                       <div>
                         <label className="text-xs font-bold text-slate-700">Stok Adedi</label>
                         <input type="number" min="0" required value={newEquip.stock} onChange={(e) => setNewEquip({...newEquip, stock: e.target.value})} placeholder="1" className="w-full mt-1 px-4 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm" />
                       </div>
                     </div>
+
                     <div>
                       <label className="text-xs font-bold text-slate-700">Video Tanıtım URL (Opsiyonel)</label>
                       <input type="text" value={newEquip.videoUrl} onChange={(e) => setNewEquip({...newEquip, videoUrl: e.target.value})} placeholder="https://youtube.com/..." className="w-full mt-1 px-4 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm" />
                     </div>
+
                     <div>
                       <label className="flex items-center gap-2 text-xs font-bold text-slate-700 cursor-pointer bg-slate-50 border border-dashed border-slate-300 rounded-xl px-4 py-3 hover:bg-slate-100 transition">
                         <Upload size={16} className="text-blue-600"/> Ekipman Görseli Yükle
@@ -952,6 +1048,7 @@ function App() {
                       </label>
                       {newEquip.photoPreview && <img src={newEquip.photoPreview} alt="Önizleme" className="mt-2 h-24 rounded-xl object-cover border border-slate-200" />}
                     </div>
+
                     <div className="flex gap-2 pt-2">
                       <button type="submit" className="flex-1 bg-blue-900 text-white font-bold py-2.5 rounded-xl hover:bg-blue-800 transition text-sm shadow">
                         {editingId ? 'Değişiklikleri Kaydet' : 'Envantere Ekle'}
@@ -1001,7 +1098,6 @@ function App() {
               </div>
             </div>
           )}
-
           {/* PERSONEL: KİRALAMA TALEPLERİ SEKMESİ (GÜNCELLENMİŞ ÇAKIŞMA & ONAY ROZETLERİ) */}
           {staffSubTab === 'requests' && can('requestsView') && (
             <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
