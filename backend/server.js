@@ -249,53 +249,76 @@ app.post('/api/equipment', authMiddleware, requirePermission('equipmentAdd'), up
     res.status(500).json({ error: err.message });
   }
 });
-app.put('/api/equipment/:id', authMiddleware, upload.single('photo'), async (req, res) => {
+app.put('/api/equipment/:id', authMiddleware, (req, res, next) => {
+  // Multer Cloudinary yükleme hatası olursa yakala
+  upload.single('photo')(req, res, (err) => {
+    if (err) {
+      console.error('Fotoğraf yükleme hatası:', err);
+      return res.status(400).json({ error: 'Görsel yüklenirken hata oluştu: ' + err.message });
+    }
+    next();
+  });
+}, async (req, res) => {
   try {
-    // 1. Yetki Kontrolü: Admin her şeyi yapabilir, personel ise equipmentEdit yetkisi olmalı
+    // 1. Yetki Kontrolü: Admin veya ekipman düzenleme yetkisi
     if (req.user.role !== 'admin' && !req.user.permissions?.equipmentEdit) {
       return res.status(403).json({ error: 'Bu işlem için yetkiniz yok.' });
     }
 
     const item = await Equipment.findById(req.params.id);
-    if (!item) return res.status(404).json({ error: 'Ekipman bulunamadı' });
+    if (!item) {
+      return res.status(404).json({ error: 'Ekipman bulunamadı.' });
+    }
 
     const { name, category, price, dailyRate, stock, specs, videoUrl, youtubeUrl } = req.body;
 
-    // Fotoğraf kontrolü: Yeni yüklendiyse Cloudinary URL'i, yüklenmediyse mevcut olanı koru
+    // 2. Fotoğraf: Yeni yüklendiyse Cloudinary URL'si gelir (req.file.path), yüklenmediyse eski URL korunur
     if (req.file && req.file.path) {
       item.photo = req.file.path;
     }
 
+    // 3. İsim ve Kategori
     if (name) item.name = name;
     if (category) item.category = category;
-    
-    // Fiyat ve stok sayısal kontrolü
+
+    // 4. Fiyat ve Stok (Sayısal dönüşüm)
     const finalPrice = price !== undefined ? price : dailyRate;
-    if (finalPrice !== undefined) item.price = Number(finalPrice);
-    if (stock !== undefined) item.stock = parseInt(stock, 10);
+    if (finalPrice !== undefined && finalPrice !== '') {
+      item.price = Number(finalPrice);
+    }
+    if (stock !== undefined && stock !== '') {
+      item.stock = parseInt(stock, 10);
+    }
 
-    // Video linki
-    const finalVideo = videoUrl || youtubeUrl;
-    if (finalVideo !== undefined) item.videoUrl = finalVideo;
+    // 5. Video URL
+    const finalVideo = videoUrl !== undefined ? videoUrl : youtubeUrl;
+    if (finalVideo !== undefined) {
+      item.videoUrl = finalVideo;
+    }
 
-    // Specs formatlama (JSON string veya satır satır metin desteği)
+    // 6. Specs Güvenli Ayrıştırma (Asla çökmez)
     if (specs !== undefined) {
       if (Array.isArray(specs)) {
         item.specs = specs;
       } else if (typeof specs === 'string') {
-        try {
-          item.specs = specs.trim().startsWith('[') ? JSON.parse(specs) : specs.split('\n').map(s => s.trim()).filter(Boolean);
-        } catch (e) {
-          item.specs = specs.split('\n').map(s => s.trim()).filter(Boolean);
+        const trimmed = specs.trim();
+        if (trimmed.startsWith('[')) {
+          try {
+            item.specs = JSON.parse(trimmed);
+          } catch (e) {
+            item.specs = trimmed.split('\n').map(s => s.trim()).filter(Boolean);
+          }
+        } else {
+          item.specs = trimmed.split('\n').map(s => s.trim()).filter(Boolean);
         }
       }
     }
 
     await item.save();
-    res.json(item);
+    return res.json(item);
   } catch (err) {
-    console.error('Ekipman Güncelleme Hatası:', err.message || err);
-    res.status(500).json({ error: err.message || 'Güncelleme sırasında hata oluştu' });
+    console.error('Ekipman Güncelleme 500 Hatası:', err);
+    return res.status(500).json({ error: err.message || 'Sunucu hatası oluştu' });
   }
 });
 
