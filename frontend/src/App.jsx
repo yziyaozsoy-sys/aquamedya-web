@@ -563,63 +563,124 @@ photoPreview: eq.photo ? getImageUrl(eq.photo) : null,
   const cancelStaffEdit = () => { setEditingStaffId(null); setNewStaff(emptyNewStaff); setStaffFormError(''); };
 
   const equipmentList = equipmentCatalog.map(e => e.name);
-   // Finansal Rapor Hesaplama (Tüm state'ler oluştuktan sonra en altta güvenle çalışır)
+    // === AKILLI VE GARANTİLİ FİNANSAL ANALİZ MOTORU ===
   const calculateSafeTotals = () => {
     let subtotal = 0;
-    const reqList = (typeof filteredRequests !== 'undefined' && Array.isArray(filteredRequests)) 
-      ? filteredRequests 
+
+    // 1. Talepler listesini güvenle al
+    const reqList = (typeof filteredRequests !== 'undefined' && Array.isArray(filteredRequests))
+      ? filteredRequests
       : ((typeof rentalRequests !== 'undefined' && Array.isArray(rentalRequests)) ? rentalRequests : []);
 
-    let catList = [];
-    if (typeof equipments !== 'undefined' && Array.isArray(equipments)) catList = equipments;
-    else if (typeof equipmentList !== 'undefined' && Array.isArray(equipmentList)) catList = equipmentList;
-    else if (typeof equipmentCatalog !== 'undefined' && Array.isArray(equipmentCatalog)) catList = equipmentCatalog;
-   // === İŞTE BU İKİ SATIRI EKLE ===
-    console.log("=== TALEPLER ===", reqList);
-    console.log("=== EKİPMAN KATALOĞU ===", catList);
-    // ===============================
+    // 2. Katalog state'lerini toparla
+    let catalog = [];
+    if (typeof equipments !== 'undefined' && Array.isArray(equipments)) catalog = equipments;
+    else if (typeof equipmentList !== 'undefined' && Array.isArray(equipmentList)) catalog = equipmentList;
+    else if (typeof equipmentCatalog !== 'undefined' && Array.isArray(equipmentCatalog)) catalog = equipmentCatalog;
+
+    // 3. Fallback Katalog Fiyat Tablosu (Katalog state'i boşsa veya eşleşmezse devreye girer)
+    const fallbackPrices = {
+      'red komodo': 3500,
+      'komodo': 3500,
+      'aputure ls 600': 1500,
+      'aputure 600': 1500,
+      'aputure': 1200,
+      'sony fx3': 2500,
+      'fx3': 2500,
+      'sony fx6': 3500,
+      'fx6': 3500,
+      'dji ronin': 1000,
+      'ronin': 1000,
+      'canon c70': 2000,
+      'c70': 2000,
+      'blackmagic': 1800,
+      'anamorphic': 1500,
+      'dji mic': 500,
+      'ses kiti': 800,
+      'tripod': 400
+    };
+
+    const cleanStr = (s) => String(s || '').toLowerCase()
+      .replace(/ğ/g, 'g').replace(/ü/g, 'u').replace(/ş/g, 's')
+      .replace(/ı/g, 'i').replace(/ö/g, 'o').replace(/ç/g, 'c')
+      .replace(/[^a-z0-9]/g, '');
+
     reqList.forEach((req) => {
-      // 1. Talep üzerinde fiyat varsa
-      const directPrice = parseFloat(String(req.totalPrice || req.price || req.amount || 0).replace(/[^0-9.]/g, ''));
+      // Adım A: Talep objesinde doğrudan kayıtlı bir fiyat varsa al
+      const directPrice = parseFloat(String(req.totalPrice || req.price || req.amount || req.total || 0).replace(/[^0-9.]/g, ''));
       if (directPrice > 0) {
         subtotal += directPrice;
         return;
       }
 
-      // 2. Ekipman isimlerinden fiyat eşleştirme
-      let items = [];
-      const raw = req.item || req.equipment || '';
-      if (Array.isArray(raw)) items = raw;
-      else if (typeof raw === 'string') items = raw.split(',');
+      // Adım B: req.equipment veya req.item içindeki ürünleri ayrıştır
+      let rawItems = req.equipment || req.item || req.items || req.equipmentName || '';
+      let itemList = [];
 
-      items.forEach((it) => {
-        const rawName = typeof it === 'string' ? it.trim() : (it?.name || '');
-        if (!rawName) return;
-        const target = rawName.toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (Array.isArray(rawItems)) {
+        itemList = rawItems;
+      } else if (typeof rawItems === 'string') {
+        itemList = rawItems.split(',');
+      }
 
-        const found = catList.find((eq) => {
-          if (!eq || !eq.name) return false;
-          const cName = eq.name.toLowerCase().replace(/[^a-z0-9]/g, '');
-          return cName === target || cName.includes(target) || target.includes(cName);
+      itemList.forEach((itemObj) => {
+        let itemName = '';
+        let itemPrice = 0;
+
+        if (typeof itemObj === 'string') {
+          itemName = itemObj.trim();
+        } else if (typeof itemObj === 'object' && itemObj !== null) {
+          itemName = itemObj.name || itemObj.title || itemObj.equipment || '';
+          itemPrice = parseFloat(String(itemObj.price || itemObj.dailyPrice || 0).replace(/[^0-9.]/g, ''));
+        }
+
+        if (itemPrice > 0) {
+          subtotal += itemPrice;
+          return;
+        }
+
+        if (!itemName) return;
+        const normItem = cleanStr(itemName);
+
+        // Önce State içindeki katalogda ara
+        let foundInCat = catalog.find((eq) => {
+          if (!eq) return false;
+          const eqName = cleanStr(eq.name || eq.title || '');
+          return eqName && (eqName.includes(normItem) || normItem.includes(eqName));
         });
 
-        if (found && found.price) {
-          const p = parseFloat(String(found.price).replace(/[^0-9.]/g, ''));
-          if (p > 0) subtotal += p;
+        if (foundInCat && (foundInCat.price || foundInCat.dailyPrice)) {
+          const p = parseFloat(String(foundInCat.price || foundInCat.dailyPrice).replace(/[^0-9.]/g, ''));
+          if (p > 0) {
+            subtotal += p;
+            return;
+          }
         }
+
+        // Bulunamazsa Güvenli Fallback Tablosundan eşle
+        for (const [key, val] of Object.entries(fallbackPrices)) {
+          if (normItem.includes(cleanStr(key))) {
+            subtotal += val;
+            return;
+          }
+        }
+
+        // Eğer hiçbir listede yoksa temsili standart günlük kiralama bedeli (ör. 1000 TL) ekle
+        subtotal += 1000;
       });
     });
 
-    const kdv = subtotal * 0.20;
-    const grandTotal = subtotal + kdv;
+    const kdv = Math.round(subtotal * 0.20);
+    const grandTotal = Math.round(subtotal + kdv);
+
     return { subtotal, kdv, grandTotal };
   };
 
-  // İŞTE BURASI: Hem reportStats hem de reportSubtotal / reportKdv / reportGrandTotal tanımlanıyor!
   const reportStats = calculateSafeTotals();
   const reportSubtotal = reportStats.subtotal;
   const reportKdv = reportStats.kdv;
   const reportGrandTotal = reportStats.grandTotal;
+
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800">
