@@ -235,34 +235,44 @@ app.post('/api/equipment', authMiddleware, requirePermission('equipmentAdd'), up
     res.status(500).json({ error: err.message });
   }
 });
-
-app.put('/api/equipment/:id', authMiddleware, requirePermission('equipmentEdit'), upload.single('photo'), async (req, res) => {
+app.put('/api/equipment/:id', authMiddleware, upload.single('photo'), async (req, res) => {
   try {
-    const { name, category, price, stock, specs, videoUrl } = req.body;
-    const item = await Equipment.findById(req.params.id);
-    if (!item) return res.status(404).json({ error: 'Bulunamadı' });
+    // 1. Yetki Kontrolü: Admin her şeyi yapabilir, personel ise equipmentEdit yetkisi olmalı
+    if (req.user.role !== 'admin' && !req.user.permissions?.equipmentEdit) {
+      return res.status(403).json({ error: 'Bu işlem için yetkiniz yok.' });
+    }
 
-    // Yeni dosya seçildiyse yeni Cloudinary linki, seçilmediyse eski link korunur:
+    const { name, category, price, dailyRate, stock, specs, videoUrl, youtubeUrl } = req.body;
+    const item = await Equipment.findById(req.params.id);
+    if (!item) return res.status(404).json({ error: 'Ekipman bulunamadı' });
+
+    // 2. Yeni dosya yüklendiyse Cloudinary URL'i, yüklenmediyse eski görsel kalır
     const photoUrl = req.file ? req.file.path : item.photo;
 
-    item.name = name; 
-    item.category = category; 
-    item.price = price;
-    item.stock = parseInt(stock) || 0;
-    item.specs = specs ? JSON.parse(specs) : item.specs;
-    item.photo = photoUrl;
-    item.videoUrl = videoUrl || item.videoUrl;
-    await item.save();
+    // 3. Specs alanını güvenli ayrıştırma (JSON veya satır satır metin)
+    let parsedSpecs = item.specs;
+    if (specs) {
+      try {
+        parsedSpecs = typeof specs === 'string' && specs.startsWith('[') ? JSON.parse(specs) : (Array.isArray(specs) ? specs : specs.split('\n'));
+      } catch (e) {
+        parsedSpecs = specs.split('\n');
+      }
+    }
 
+    item.name = name || item.name;
+    item.category = category || item.category;
+    item.price = price !== undefined ? price : (dailyRate !== undefined ? dailyRate : item.price);
+    item.stock = stock !== undefined ? parseInt(stock) : item.stock;
+    item.specs = parsedSpecs;
+    item.photo = photoUrl;
+    item.videoUrl = videoUrl || youtubeUrl || item.videoUrl;
+
+    await item.save();
     res.json(item);
   } catch (err) {
+    console.error('Güncelleme hatası:', err);
     res.status(500).json({ error: err.message });
   }
-});
-
-app.delete('/api/equipment/:id', authMiddleware, requirePermission('equipmentDelete'), async (req, res) => {
-  await Equipment.findByIdAndDelete(req.params.id);
-  res.json({ success: true });
 });
 
 // --- TALEP ROUTES ---
