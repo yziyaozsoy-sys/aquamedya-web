@@ -775,7 +775,7 @@ photoPreview: eq.photo ? getImageUrl(eq.photo) : null,
               })}
             </div>
 
-                       {/* FİLTRELENMİŞ EKİPMAN KARTLARI */}
+                               {/* FİLTRELENMİŞ EKİPMAN KARTLARI */}
             <div className="grid md:grid-cols-3 gap-6">
               {equipmentCatalog
                 .filter((eq) => activeCatalogCategory === 'Tümü' || eq.category === activeCatalogCategory)
@@ -783,44 +783,38 @@ photoPreview: eq.photo ? getImageUrl(eq.photo) : null,
                   const IconComp = categoryIcons[eq.category] || Package;
                   const isSelected = rentalForm.equipment.includes(eq.name);
                   return (
-                    <div key={eq._id || eq.id} className={"bg-white rounded-2xl shadow-sm border transition overflow-hidden flex flex-col justify-between " + (isSelected ? 'border-cyan-500 ring-2 ring-cyan-200' : 'border-slate-200 hover:shadow-md')}>
+                    <div 
+                      key={eq._id || eq.id} 
+                      className={"bg-white rounded-2xl shadow-sm border transition overflow-hidden flex flex-col justify-between " + (isSelected ? 'border-cyan-500 ring-2 ring-cyan-200' : 'border-slate-200 hover:shadow-md')}
+                    >
                       <div>
-                       // DOĞRU HALİ:
-<div className="bg-slate-100 h-44 flex items-center justify-center overflow-hidden relative">
-  {eq.photo ? (
-    <img 
-      src={getImageUrl(eq.photo)} 
-      alt={eq.name} 
-      className="w-full h-full object-cover" 
-    />
-  ) : (
-    <IconComp className="text-slate-400" size={54} />
-  )}
-</div>
+                        <div className="bg-slate-100 h-44 flex items-center justify-center overflow-hidden relative">
+                          {eq.photo ? (
+                            <img 
+                              src={getImageUrl(eq.photo)} 
+                              alt={eq.name} 
+                              className="w-full h-full object-cover" 
+                            />
+                          ) : (
+                            <IconComp className="text-slate-400" size={54} />
+                          )}
                           <span className="absolute top-3 left-3 text-[11px] font-bold text-blue-900 bg-white/95 backdrop-blur-sm px-2.5 py-1 rounded-full shadow-sm border border-slate-100">
                             {eq.category}
                           </span>
                         </div>
+
                         <div className="p-5">
                           <div className="flex justify-between items-start mb-2">
                             <h3 className="font-bold text-slate-800 text-base">{eq.name}</h3>
                             <span className="flex items-center gap-1 text-xs text-amber-600 font-semibold bg-amber-50 px-2 py-0.5 rounded">
                               <Star size={12} fill="currentColor" /> {eq.rating || 4.8}
                             </span>
-                          <div className="bg-slate-100 h-44 flex items-center justify-center overflow-hidden relative">
-  {eq.photo ? (
-    <img 
-      src={getImageUrl(eq.photo)} 
-      alt={eq.name} 
-      className="w-full h-full object-cover" 
-    />
-  ) : (
-    <IconComp className="text-slate-400" size={54} />
-  )}
-</div>
+                          </div>
+                        </div>
+                      </div>
 
-{/* KART ALTI: VİDEO VE KİRALAMA ALANI */}
-<div className="p-5 pt-3 border-t border-slate-100 mt-auto bg-slate-50/50 flex flex-col gap-3">
+                      {/* KART ALTI: VİDEO VE KİRALAMA ALANI */}
+                      <div className="p-5 pt-3 border-t border-slate-100 mt-auto bg-slate-50/50 flex flex-col gap-3">
                         {(eq.videoUrl || eq.youtubeUrl) && (
                           <button
                             type="button"
