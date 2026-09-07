@@ -775,19 +775,24 @@ photoPreview: eq.photo ? getImageUrl(eq.photo) : null,
               })}
             </div>
 
-                               {/* FİLTRELENMİŞ EKİPMAN KARTLARI */}
+                                         {/* FİLTRELENMİŞ EKİPMAN KARTLARI */}
             <div className="grid md:grid-cols-3 gap-6">
               {equipmentCatalog
                 .filter((eq) => activeCatalogCategory === 'Tümü' || eq.category === activeCatalogCategory)
                 .map((eq) => {
                   const IconComp = categoryIcons[eq.category] || Package;
                   const isSelected = rentalForm.equipment.includes(eq.name);
+                  const priceDisplay = typeof eq.price === 'string' && eq.price.includes('₺')
+                    ? eq.price
+                    : `${Number(eq.price || eq.dailyRate || 0).toLocaleString('tr-TR')} ₺`;
+
                   return (
                     <div 
                       key={eq._id || eq.id} 
                       className={"bg-white rounded-2xl shadow-sm border transition overflow-hidden flex flex-col justify-between " + (isSelected ? 'border-cyan-500 ring-2 ring-cyan-200' : 'border-slate-200 hover:shadow-md')}
                     >
                       <div>
+                        {/* RESİM ALANI */}
                         <div className="bg-slate-100 h-44 flex items-center justify-center overflow-hidden relative">
                           {eq.photo ? (
                             <img 
@@ -803,13 +808,25 @@ photoPreview: eq.photo ? getImageUrl(eq.photo) : null,
                           </span>
                         </div>
 
+                        {/* İÇERİK & ÖZELLİKLER */}
                         <div className="p-5">
                           <div className="flex justify-between items-start mb-2">
                             <h3 className="font-bold text-slate-800 text-base">{eq.name}</h3>
-                            <span className="flex items-center gap-1 text-xs text-amber-600 font-semibold bg-amber-50 px-2 py-0.5 rounded">
-                              <Star size={12} fill="currentColor" /> {eq.rating || 4.8}
+                            <span className="text-xs text-amber-600 font-semibold bg-amber-50 px-2 py-0.5 rounded">
+                              ★ {eq.rating || 4.8}
                             </span>
                           </div>
+
+                          {eq.specs && eq.specs.length > 0 && (
+                            <ul className="text-xs text-slate-500 space-y-1.5 my-3">
+                              {eq.specs.slice(0, 4).map((spec, sIdx) => (
+                                <li key={sIdx} className="flex items-center gap-2">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-cyan-500 shrink-0"></span>
+                                  <span className="line-clamp-1">{spec}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
                         </div>
                       </div>
 
@@ -834,7 +851,7 @@ photoPreview: eq.photo ? getImageUrl(eq.photo) : null,
                         <div className="flex items-center justify-between">
                           <div>
                             <span className="text-[11px] text-slate-400 block font-medium">Günlük Kiralama</span>
-                            <span className="font-extrabold text-slate-800 text-base">{eq.price}</span>
+                            <span className="font-extrabold text-slate-800 text-base">{priceDisplay}</span>
                           </div>
                           <button 
                             type="button"
