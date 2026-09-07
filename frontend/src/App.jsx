@@ -159,8 +159,7 @@ function App() {
       .replace(/[^a-z0-9]/g, '')
       .trim();
   };
-
-   // Metin temizleme yardımcı fonksiyonu (Türkçe ve boşluk toleransı)
+  // Metin temizleme yardımcı fonksiyonu
   const safeNormalize = (s) => {
     if (!s) return '';
     return String(s)
@@ -171,70 +170,6 @@ function App() {
       .trim();
   };
 
-  const calculateFinancials = () => {
-    let subtotal = 0;
-
-    // 1. Talepler dizisini güvenli yakala
-    const reqList = (typeof filteredRequests !== 'undefined' && Array.isArray(filteredRequests))
-      ? filteredRequests
-      : ((typeof rentalRequests !== 'undefined' && Array.isArray(rentalRequests)) ? rentalRequests : []);
-
-    // 2. Projedeki ekipman kataloğunu hangi isimle tutuluyorsa yakala
-    const catList = (typeof equipments !== 'undefined' && Array.isArray(equipments))
-      ? equipments
-      : ((typeof equipmentList !== 'undefined' && Array.isArray(equipmentList))
-          ? equipmentList
-          : ((typeof equipmentCatalog !== 'undefined' && Array.isArray(equipmentCatalog))
-              ? equipmentCatalog
-              : ((typeof products !== 'undefined' && Array.isArray(products)) ? products : [])));
-
-    reqList.forEach((req) => {
-      // Talep üzerinde doğrudan fiyat yazılmışsa al
-      const directPrice = parseSafePrice(req.totalPrice || req.price || req.amount || req.total);
-      if (directPrice > 0) {
-        subtotal += directPrice;
-        return;
-      }
-
-      // Talepteki ekipmanları listeye çevir
-      let itemsList = [];
-      const rawItemData = req.item || req.equipment || req.items || req.equipments || '';
-      
-      if (Array.isArray(rawItemData)) {
-        itemsList = rawItemData;
-      } else if (typeof rawItemData === 'string') {
-        itemsList = rawItemData.split(',');
-      }
-
-      itemsList.forEach((rawItem) => {
-        if (!rawItem) return;
-        const itemName = typeof rawItem === 'string' ? rawItem.trim() : (rawItem.name || '');
-        const targetClean = safeNormalize(itemName);
-        if (!targetClean) return;
-
-        // Katalogdaki ürünlerle eşleştir
-        const matched = catList.find((eq) => {
-          if (!eq || !eq.name) return false;
-          const catClean = safeNormalize(eq.name);
-          return (
-            catClean === targetClean ||
-            catClean.includes(targetClean) ||
-            targetClean.includes(catClean)
-          );
-        });
-
-        if (matched) {
-          subtotal += parseSafePrice(matched.price || matched.dailyPrice || matched.fee);
-        }
-      });
-    });
-
-    const kdv = subtotal * 0.20;
-    const grandTotal = subtotal + kdv;
-    return { subtotal, kdv, grandTotal };
-  };
-
-  const { subtotal: reportSubtotal, kdv: reportKdv, grandTotal: reportGrandTotal } = calculateFinancials();
   // Kiralama Formu State'i
   const [deliveryType, setDeliveryType] = useState('MERKEZ');
   const [rentalForm, setRentalForm] = useState({ 
@@ -244,6 +179,19 @@ function App() {
     deliveryLocation: '', 
     notes: '' 
   });
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [customCategory, setCustomCategory] = useState('');
+  const [isNewCategory, setIsNewCategory] = useState(false);
+  const [currency, setCurrency] = useState('₺');
+  
+  // 2 Kademeli Çakışma Uyarı Modalı State'i
+  const [conflictModal, setConflictModal] = useState({
+    isOpen: false,
+    step: 1,
+    requestId: null,
+    data: null
+  });
+
   const [showSuccess, setShowSuccess] = useState(false);
   const [customCategory, setCustomCategory] = useState('');
   const [isNewCategory, setIsNewCategory] = useState(false);
@@ -628,7 +576,56 @@ photoPreview: eq.photo ? getImageUrl(eq.photo) : null,
   const cancelStaffEdit = () => { setEditingStaffId(null); setNewStaff(emptyNewStaff); setStaffFormError(''); };
 
   const equipmentList = equipmentCatalog.map(e => e.name);
+  // Finansal Rapor Hesaplama (Tüm state'ler oluştuktan sonra en altta güvenle çalışır)
+  const calculateSafeTotals = () => {
+    let subtotal = 0;
+    const reqList = (typeof filteredRequests !== 'undefined' && Array.isArray(filteredRequests)) 
+      ? filteredRequests 
+      : ((typeof rentalRequests !== 'undefined' && Array.isArray(rentalRequests)) ? rentalRequests : []);
 
+    let catList = [];
+    if (typeof equipments !== 'undefined' && Array.isArray(equipments)) catList = equipments;
+    else if (typeof equipmentList !== 'undefined' && Array.isArray(equipmentList)) catList = equipmentList;
+    else if (typeof equipmentCatalog !== 'undefined' && Array.isArray(equipmentCatalog)) catList = equipmentCatalog;
+
+    reqList.forEach((req) => {
+      // 1. Talep üzerinde fiyat varsa
+      const directPrice = parseFloat(String(req.totalPrice || req.price || req.amount || 0).replace(/[^0-9.]/g, ''));
+      if (directPrice > 0) {
+        subtotal += directPrice;
+        return;
+      }
+
+      // 2. Ekipman isimlerinden fiyat eşleştirme
+      let items = [];
+      const raw = req.item || req.equipment || '';
+      if (Array.isArray(raw)) items = raw;
+      else if (typeof raw === 'string') items = raw.split(',');
+
+      items.forEach((it) => {
+        const rawName = typeof it === 'string' ? it.trim() : (it?.name || '');
+        if (!rawName) return;
+        const target = rawName.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+        const found = catList.find((eq) => {
+          if (!eq || !eq.name) return false;
+          const cName = eq.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+          return cName === target || cName.includes(target) || target.includes(cName);
+        });
+
+        if (found && found.price) {
+          const p = parseFloat(String(found.price).replace(/[^0-9.]/g, ''));
+          if (p > 0) subtotal += p;
+        }
+      });
+    });
+
+    const kdv = subtotal * 0.20;
+    const grandTotal = subtotal + kdv;
+    return { subtotal, kdv, grandTotal };
+  };
+
+  const reportStats = calculateSafeTotals();
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800">
       {/* HEADER */}
