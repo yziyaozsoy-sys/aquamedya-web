@@ -13,15 +13,13 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 const getImageUrl = (imagePath) => {
   if (!imagePath) return '/logo.png';
   if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
-    return imagePath; // Cloudinary'den gelen tam link
+    return imagePath;
   }
   return `${API_URL}${imagePath.startsWith('/') ? '' : '/'}${imagePath}`;
 };
-  
-  // 2. Eski yerel sunucu yolu ise (/uploads/... gibi), başına backend adresini ekle:
-  return `${API_URL}${imagePath.startsWith('/') ? '' : '/'}${imagePath}`;
-};
+
 const COMPANY_DETAILS = {
+
   name: 'AQUA MEDYA TİCARET LİMİTED ŞİRKETİ',
   address: 'Merkez Mahallesi Seçkin Sokak Z Ofis A Blok No:2-4/90 Kağıthane / İSTANBUL',
   phone: '0 212 325 25 25',
