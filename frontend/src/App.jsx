@@ -33,7 +33,7 @@ const permissionLabels = {
 
 const emptyPermissions = { 
   equipmentView: true, equipmentAdd: false, equipmentEdit: false, 
-  equipmentDelete: false, requestsView: false, requestsManage: false 
+  equipmentDelete: false, requestsView: false, requestsManage: false, viewFinances: false //
 };
 
 function App() {

@@ -9,7 +9,7 @@ const permissionsSchema = new mongoose.Schema({
   equipmentDelete: { type: Boolean, default: false },
   requestsView:    { type: Boolean, default: false },
   requestsManage:  { type: Boolean, default: false },
-  costsView:       { type: Boolean, default: false } // <-- İŞTE EKSİK OLAN ALAN BURASI!
+  viewFinances:    { type: Boolean, default: false } //  <-- İŞTE EKSİK OLAN ALAN BURASI!
 }, { _id: false });
 
 const staffSchema = new mongoose.Schema({
