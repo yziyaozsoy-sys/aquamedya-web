@@ -807,22 +807,20 @@ photoPreview: eq.photo ? getImageUrl(eq.photo) : null,
                             <span className="flex items-center gap-1 text-xs text-amber-600 font-semibold bg-amber-50 px-2 py-0.5 rounded">
                               <Star size={12} fill="currentColor" /> {eq.rating || 4.8}
                             </span>
-                          </div>
-                          <p className={"text-xs font-semibold mb-3 " + (eq.stock > 0 ? 'text-emerald-600' : 'text-rose-500')}>
-                            {eq.stock > 0 ? `Stokta: ${eq.stock} adet mevcut` : 'Geçici Olarak Stokta Yok'}
-                          </p>
-                          <ul className="text-xs text-slate-600 space-y-1 mb-4">
-                            {(eq.specs || []).map((spec, i) => (
-                              <li key={i} className="flex items-start gap-1.5">
-                                <CheckCircle size={13} className="text-cyan-600 mt-0.5 shrink-0" />{spec}
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      </div>
+                          <div className="bg-slate-100 h-44 flex items-center justify-center overflow-hidden relative">
+  {eq.photo ? (
+    <img 
+      src={getImageUrl(eq.photo)} 
+      alt={eq.name} 
+      className="w-full h-full object-cover" 
+    />
+  ) : (
+    <IconComp className="text-slate-400" size={54} />
+  )}
+</div>
 
-                      {/* KART ALTI: VİDEO VE KİRALAMA ALANI */}
-                      <div className="p-5 pt-3 border-t border-slate-100 mt-auto bg-slate-50/50 flex flex-col gap-3">
+{/* KART ALTI: VİDEO VE KİRALAMA ALANI */}
+<div className="p-5 pt-3 border-t border-slate-100 mt-auto bg-slate-50/50 flex flex-col gap-3">
                         {(eq.videoUrl || eq.youtubeUrl) && (
                           <button
                             type="button"
