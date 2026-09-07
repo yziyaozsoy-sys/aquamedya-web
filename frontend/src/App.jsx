@@ -6,6 +6,7 @@ import {
   Upload, Trash2, Edit2, Plus, X, Shield, Users, LogOut, AlertTriangle, 
   FileText, AlertCircle, Check
 } from 'lucide-react';
+import { generateRentalPDF } from './generateRentalContract';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
@@ -1562,9 +1563,15 @@ photoPreview: eq.photo ? getImageUrl(eq.photo) : null,
                               : 'bekliyor'}
                           </span>
                           
-                          <button onClick={() => downloadRequestAsWord(req)} className="p-2 bg-slate-100 text-slate-700 rounded-xl hover:bg-slate-200 transition" title="Word Sözleşme Formu Olarak İndir">
-                            <FileText size={16} />
-                          </button>
+                          <button 
+  type="button" 
+  onClick={() => generateRentalPDF(req)} 
+  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-black text-white rounded-xl text-xs font-semibold shadow-sm transition" 
+  title="Kiralama Sözleşmesi ve Teslim Tutanağını PDF İndir"
+>
+  <FileText size={14} className="text-cyan-400" />
+  <span>PDF Sözleşme</span>
+</button>
 
                           {/* SİLME BUTONU (SADECE ADMİN) */}
                           {isAdmin && (
