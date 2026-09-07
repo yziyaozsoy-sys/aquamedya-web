@@ -574,7 +574,10 @@ photoPreview: eq.photo ? getImageUrl(eq.photo) : null,
     if (typeof equipments !== 'undefined' && Array.isArray(equipments)) catList = equipments;
     else if (typeof equipmentList !== 'undefined' && Array.isArray(equipmentList)) catList = equipmentList;
     else if (typeof equipmentCatalog !== 'undefined' && Array.isArray(equipmentCatalog)) catList = equipmentCatalog;
-
+   // === İŞTE BU İKİ SATIRI EKLE ===
+    console.log("=== TALEPLER ===", reqList);
+    console.log("=== EKİPMAN KATALOĞU ===", catList);
+    // ===============================
     reqList.forEach((req) => {
       // 1. Talep üzerinde fiyat varsa
       const directPrice = parseFloat(String(req.totalPrice || req.price || req.amount || 0).replace(/[^0-9.]/g, ''));
