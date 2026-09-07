@@ -434,7 +434,7 @@ function App() {
     }
   };
 
-  const handleAddOrUpdateEquip = async (e) => {
+   const handleAddOrUpdateEquip = async (e) => {
     e.preventDefault();
     const specsArr = newEquip.specsText.split('\n').map(s => s.trim()).filter(s => s);
 
@@ -442,16 +442,19 @@ function App() {
       ? customCategory.trim() 
       : newEquip.category;
 
-    const finalPrice = `${newEquip.price} ${currency} / Gün`;
+    // Fiyatı temiz sayı olarak alıyoruz:
+    const cleanPrice = parseFloat(String(newEquip.price || 0).replace(',', '.').replace(/[^0-9.]/g, '')) || 0;
 
     const formData = new FormData();
     formData.append('name', newEquip.name);
     formData.append('category', finalCategory);
-    formData.append('price', finalPrice);
+    formData.append('price', cleanPrice); // Sadece sayı gidiyor (örn: 3500)
+    formData.append('currency', currency || '₺'); // Para birimi ayrı gidiyor
     formData.append('stock', newEquip.stock);
     formData.append('specs', JSON.stringify(specsArr));
     formData.append('videoUrl', newEquip.videoUrl || '');
     if (newEquip.photoFile) formData.append('photo', newEquip.photoFile);
+
 
     try {
       if (editingId) {
@@ -563,7 +566,28 @@ photoPreview: eq.photo ? getImageUrl(eq.photo) : null,
   const cancelStaffEdit = () => { setEditingStaffId(null); setNewStaff(emptyNewStaff); setStaffFormError(''); };
 
   const equipmentList = equipmentCatalog.map(e => e.name);
-    // === AKILLI VE GARANTİLİ FİNANSAL ANALİZ MOTORU ===
+    // Ekipman fiyatını güvenle ekrana basan fonksiyon (NaN hatasını tamamen engeller)
+   const formatEquipmentPrice = (item) => {
+    if (!item) return '0';
+
+    // 1. Olası tüm fiyat alanlarını kontrol et
+    const rawPrice = item.price ?? item.dailyPrice ?? item.daily_price ?? item.kiraBedeli ?? item.cost;
+    
+    if (rawPrice === undefined || rawPrice === null || rawPrice === '') {
+      return '0';
+    }
+
+        // 2. Virgülü noktaya çevir ve metin içinden sadece rakam/ondalık kısmını ayıkla
+    const strVal = String(rawPrice).replace(',', '.');
+    const match = strVal.match(/[\d.]+/);
+
+    if (!match) return '0';
+
+    const num = parseFloat(match[0]);
+    return isNaN(num) ? '0' : num.toLocaleString('tr-TR');
+  };
+
+  // === AKILLI VE GARANTİLİ FİNANSAL ANALİZ MOTORU ===
   const calculateSafeTotals = () => {
     let subtotal = 0;
 
@@ -665,7 +689,7 @@ photoPreview: eq.photo ? getImageUrl(eq.photo) : null,
           }
         }
 
-        // Eğer hiçbir listede yoksa temsili standart günlük kiralama bedeli (ör. 1000 TL) ekle
+        // Standart fallback
         subtotal += 1000;
       });
     });
@@ -945,7 +969,7 @@ photoPreview: eq.photo ? getImageUrl(eq.photo) : null,
                         <div className="flex items-center justify-between">
                           <div>
                             <span className="text-[11px] text-slate-400 block font-medium">Günlük Kiralama</span>
-                            <span className="font-extrabold text-slate-800 text-base">{priceDisplay}</span>
+                            <span className="font-extrabold text-slate-800 text-base">{formatEquipmentPrice(eq)} ₺</span>
                           </div>
                           <button 
                             type="button"
