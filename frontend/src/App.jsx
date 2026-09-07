@@ -184,14 +184,6 @@ function App() {
   const [isNewCategory, setIsNewCategory] = useState(false);
   const [currency, setCurrency] = useState('₺');
   
-  // 2 Kademeli Çakışma Uyarı Modalı State'i
-  const [conflictModal, setConflictModal] = useState({
-    isOpen: false,
-    step: 1,
-    requestId: null,
-    data: null
-  });
-
   const [showSuccess, setShowSuccess] = useState(false);
   const [customCategory, setCustomCategory] = useState('');
   const [isNewCategory, setIsNewCategory] = useState(false);
