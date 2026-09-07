@@ -8,19 +8,15 @@ import {
 } from 'lucide-react';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+
 // Cloudinary ve Yerel Resim URL Çözümleyici
 const getImageUrl = (imagePath) => {
   if (!imagePath) return '/logo.png';
   if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
     return imagePath; // Cloudinary'den gelen tam link
   }
- const getImageUrl = (imagePath) => {
-  if (!imagePath) return '/logo.png';
-  
-  // 1. Resim zaten tam bir internet linki ise (Cloudinary linki gibi), doğrudan kendisini ver:
-  if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
-    return imagePath;
-  }
+  return `${API_URL}${imagePath.startsWith('/') ? '' : '/'}${imagePath}`;
+};
   
   // 2. Eski yerel sunucu yolu ise (/uploads/... gibi), başına backend adresini ekle:
   return `${API_URL}${imagePath.startsWith('/') ? '' : '/'}${imagePath}`;
