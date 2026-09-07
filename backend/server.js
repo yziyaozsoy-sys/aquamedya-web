@@ -116,38 +116,39 @@ async function sendApprovalEmail(requestData, approverName) {
 app.use(cors());
 app.use(express.json());
 
+const cloudinary = require('cloudinary').v2;
+
 // --- CLOUDINARY YAPILANDIRMASI ---
 cloudinary.config({
   cloud_name: 'fwqrvwf7',
   api_key: '723196441566917',
-  api_secret: 'y39qbHnWFZJQJr79llagKE7HlEQ' // l harfi düzeltildi
+  api_secret: process.env.CLOUDINARY_API_SECRET || 'y39qbHnWFZJQJr79llagKE7HlEQ'
 });
 
-// Resimleri buluta (Cloudinary) yükleyecek depolama motoru (İmza hatası düzeltildi)
-const storage = new CloudinaryStorage({
-  cloudinary: cloudinary,
-  params: {
-    folder: 'aquamedya_ekipmanlar',
-    format: async (req, file) => {
-      const ext = file.mimetype.split('/')[1];
-      return ['jpeg', 'jpg', 'png', 'webp'].includes(ext) ? ext : 'jpg';
-    },
-    public_id: (req, file) => {
-      const cleanName = file.originalname.split('.')[0].replace(/[^a-zA-Z0-9]/g, '_');
-      return `${Date.now()}_${cleanName}`;
-    }
-  }
-});
-
+// Dosyayı belleğe (RAM) alan güvenli multer depolaması
+const storage = multer.memoryStorage();
 const upload = multer({ 
   storage: storage,
-  limits: { fileSize: 5 * 1024 * 1024 }
+  limits: { fileSize: 10 * 1024 * 1024 } // 10MB sınır
 });
 
-const defaultPermissions = {
-  equipmentView: true, equipmentAdd: false, equipmentEdit: false,
-  equipmentDelete: false, requestsView: false, requestsManage: false, viewFinances: false
+// Cloudinary'ye doğrudan buffer yükleyen yardımcı fonksiyon
+const uploadToCloudinary = (fileBuffer) => {
+  return new Promise((resolve, reject) => {
+    const uploadStream = cloudinary.uploader.upload_stream(
+      {
+        folder: 'aquamedya_ekipmanlar',
+        resource_type: 'image'
+      },
+      (error, result) => {
+        if (error) return reject(error);
+        resolve(result);
+      }
+    );
+    uploadStream.end(fileBuffer);
+  });
 };
+
 // --- Auth Middleware ---
 function authMiddleware(req, res, next) {
   const authHeader = req.headers['authorization'];
@@ -259,18 +260,9 @@ app.post('/api/equipment', authMiddleware, requirePermission('equipmentAdd'), up
     res.status(500).json({ error: err.message });
   }
 });
-app.put('/api/equipment/:id', authMiddleware, (req, res, next) => {
-  // Multer Cloudinary yükleme hatası olursa yakala
-  upload.single('photo')(req, res, (err) => {
-    if (err) {
-      console.error('Fotoğraf yükleme hatası:', err);
-      return res.status(400).json({ error: 'Görsel yüklenirken hata oluştu: ' + err.message });
-    }
-    next();
-  });
-}, async (req, res) => {
+app.put('/api/equipment/:id', authMiddleware, upload.single('photo'), async (req, res) => {
   try {
-    // 1. Yetki Kontrolü: Admin veya ekipman düzenleme yetkisi
+    // Yetki Kontrolü
     if (req.user.role !== 'admin' && !req.user.permissions?.equipmentEdit) {
       return res.status(403).json({ error: 'Bu işlem için yetkiniz yok.' });
     }
@@ -282,16 +274,22 @@ app.put('/api/equipment/:id', authMiddleware, (req, res, next) => {
 
     const { name, category, price, dailyRate, stock, specs, videoUrl, youtubeUrl } = req.body;
 
-    // 2. Fotoğraf: Yeni yüklendiyse Cloudinary URL'si gelir (req.file.path), yüklenmediyse eski URL korunur
-    if (req.file && req.file.path) {
-      item.photo = req.file.path;
+    // Fotoğraf yükleme (Doğrudan Cloudinary Stream)
+    if (req.file) {
+      try {
+        const result = await uploadToCloudinary(req.file.buffer);
+        item.photo = result.secure_url;
+      } catch (uploadErr) {
+        console.error('Cloudinary doğrudan yükleme hatası:', uploadErr);
+        return res.status(400).json({ error: 'Görsel yüklenemedi: ' + (uploadErr.message || 'Hata') });
+      }
     }
 
-    // 3. İsim ve Kategori
+    // İsim ve Kategori
     if (name) item.name = name;
     if (category) item.category = category;
 
-    // 4. Fiyat ve Stok (Sayısal dönüşüm)
+    // Fiyat ve Stok
     const finalPrice = price !== undefined ? price : dailyRate;
     if (finalPrice !== undefined && finalPrice !== '') {
       item.price = Number(finalPrice);
@@ -300,13 +298,13 @@ app.put('/api/equipment/:id', authMiddleware, (req, res, next) => {
       item.stock = parseInt(stock, 10);
     }
 
-    // 5. Video URL
+    // Video URL
     const finalVideo = videoUrl !== undefined ? videoUrl : youtubeUrl;
     if (finalVideo !== undefined) {
       item.videoUrl = finalVideo;
     }
 
-    // 6. Specs Güvenli Ayrıştırma (Asla çökmez)
+    // Specs Güvenli Ayrıştırma
     if (specs !== undefined) {
       if (Array.isArray(specs)) {
         item.specs = specs;
@@ -327,11 +325,10 @@ app.put('/api/equipment/:id', authMiddleware, (req, res, next) => {
     await item.save();
     return res.json(item);
   } catch (err) {
-    console.error('Ekipman Güncelleme 500 Hatası:', err);
+    console.error('Ekipman Güncelleme Hatası:', err);
     return res.status(500).json({ error: err.message || 'Sunucu hatası oluştu' });
   }
 });
-
 // --- TALEP ROUTES ---
 app.post('/api/requests', memberAuthMiddleware, async (req, res) => {
   const { item, date, time, location, notes } = req.body;
