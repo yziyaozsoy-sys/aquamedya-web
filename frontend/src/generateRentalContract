@@ -1,7 +1,7 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
-// Türkçe Karakterleri jsPDF Uyumlu Temiz Harflere Dönüştürücü
+// Türkçe karakterleri standart Latin harflerine çevirerek bozulmayı önler
 const fixTr = (text) => {
   if (!text) return '';
   return String(text)
@@ -13,31 +13,68 @@ const fixTr = (text) => {
     .replace(/ç/g, 'c').replace(/Ç/g, 'C');
 };
 
-export const generateRentalPDF = (req) => {
+// public/logo.png dosyasını Base64'e çeviren yardımcı fonksiyon
+const loadLogoBase64 = () => {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = 'Anonymous';
+    img.src = '/logo.png';
+    img.onload = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+        resolve(canvas.toDataURL('image/png'));
+      } catch (e) {
+        resolve(null);
+      }
+    };
+    img.onerror = () => resolve(null);
+  });
+};
+
+export const generateRentalPDF = async (req) => {
   const doc = new jsPDF();
 
   // --- ÜST BANNER (Slate-900) ---
   doc.setFillColor(15, 23, 42);
   doc.rect(0, 0, 210, 36, 'F');
 
-  // Modern Vektörel Logo Rozeti (Sol Üst)
-  doc.setFillColor(8, 145, 178); // Cyan-600
-  doc.roundedRect(14, 8, 18, 18, 3, 3, 'F');
-  doc.setTextColor(255, 255, 255);
-  doc.setFontSize(11);
-  doc.setFont('helvetica', 'bold');
-  doc.text('AQ', 17.5, 20);
+  // Logoyu Yerleştir
+  const logoData = await loadLogoBase64();
+  if (logoData) {
+    try {
+      doc.addImage(logoData, 'PNG', 14, 8, 20, 20);
+    } catch (e) {
+      // Logo yüklenemezse yedek kutu
+      doc.setFillColor(8, 145, 178);
+      doc.roundedRect(14, 8, 18, 18, 3, 3, 'F');
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'bold');
+      doc.text('AQUA', 16, 20);
+    }
+  } else {
+    doc.setFillColor(8, 145, 178);
+    doc.roundedRect(14, 8, 18, 18, 3, 3, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'bold');
+    doc.text('AQUA', 16, 20);
+  }
 
   // Başlıklar
   doc.setTextColor(255, 255, 255);
   doc.setFontSize(14);
   doc.setFont('helvetica', 'bold');
-  doc.text(fixTr('EKIPMAN KIRALAMA VE TESLIM TUTANAGI'), 38, 18);
+  doc.text(fixTr('EKİPMAN KİRALAMA VE TESLİM TUTANAGI'), 38, 18);
 
   doc.setFontSize(8.5);
   doc.setFont('helvetica', 'normal');
-  doc.setTextColor(148, 163, 184); // Slate-400
-  doc.text(fixTr('AQUA MEDYA TICARET LIMITED SIRKETI'), 38, 25);
+  doc.setTextColor(148, 163, 184);
+  doc.text(fixTr('AQUA MEDYA TİCARET LİMİTED ŞİRKETİ'), 38, 25);
 
   const contractNo = `KRL-${(req._id || req.id || Date.now().toString()).slice(-6).toUpperCase()}`;
   doc.setFontSize(8);
@@ -49,30 +86,40 @@ export const generateRentalPDF = (req) => {
   doc.setTextColor(30, 41, 59);
   doc.setFontSize(9);
   doc.setFont('helvetica', 'bold');
-  doc.text(fixTr('KIRALAYAN (FIRMA BILGILERI):'), 14, 46);
-  doc.text(fixTr('KIRALAYAN MUSTERI / KURUM:'), 110, 46);
+  doc.text(fixTr('KİRALAYAN (FİRMA BİLGİLERİ):'), 14, 46);
+  doc.text(fixTr('KİRALAYAN MÜŞTERİ / KURUM:'), 110, 46);
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
   doc.setTextColor(51, 65, 85);
   doc.text([
-    fixTr('AQUA MEDYA TIC. LTD. STI.'),
-    fixTr('Merkez Mah. Seckin Sok. Z Ofis No:2-4/90'),
-    fixTr('Kagithane / ISTANBUL'),
+    fixTr('AQUA MEDYA TİC. LTD. STİ.'),
+    fixTr('Merkez Mah. Seçkin Sok. Z Ofis No:2-4/90'),
+    fixTr('Kağıthane / İSTANBUL'),
     fixTr('Tel: 0 212 325 25 25 / GSM: 0 532 011 01 01'),
     fixTr('E-posta: info@aquamedya.com.tr')
   ], 14, 52);
 
-  // Müşteri Bilgilerini Kapsamlı Çözümleme (Tüm olası anahtarlar taranır)
-  const customerName = req.customer || req.name || req.customerName || req.userName || 'Musteri Belirtilmedi';
-  const customerPhone = req.phone || req.telephone || req.tel || req.customerPhone || req.userPhone || req.memberPhone || '-';
+  // Müşteri İsmi ve Telefon Çözümleme
+  let rawCustomer = req.customer || req.name || req.customerName || req.userName || 'Musteri Belirtilmedi';
+  let extractedPhone = req.phone || req.telephone || req.tel || req.customerPhone || req.userPhone || req.memberPhone || '';
+
+  // Eğer telefon ayrı alanda yoksa ve müşteri adı "y.ziyaozsoy (05357408103)" şeklindeyse:
+  const phoneMatch = rawCustomer.match(/\((.*?)\)/);
+  if (phoneMatch && phoneMatch[1]) {
+    if (!extractedPhone || extractedPhone === '-') {
+      extractedPhone = phoneMatch[1].trim();
+    }
+    rawCustomer = rawCustomer.replace(/\(.*?\)/, '').trim();
+  }
+
   const customerEmail = req.email || req.mail || req.customerEmail || req.userEmail || '-';
   const rentalDate = `${req.date || '-'} ${req.time ? `(${req.time})` : ''}`;
-  const deliveryPlace = req.location === 'MERKEZDEN_TESLIM' ? 'Merkezden Kendisi Alacak' : (req.location || 'Ofisten Teslim');
+  const deliveryPlace = req.location === 'MERKEZDEN_TESLİM' ? 'Merkezden Kendisi Alacak' : (req.location || 'Ofisten Teslim');
 
   doc.text([
-    fixTr(`Ad Soyad / Firma: ${customerName}`),
-    fixTr(`Telefon          : ${customerPhone}`),
+    fixTr(`Ad Soyad / Firma: ${rawCustomer}`),
+    fixTr(`Telefon          : ${extractedPhone || '-'}`),
     fixTr(`E-posta          : ${customerEmail}`),
     fixTr(`Teslimat Yeri    : ${deliveryPlace}`),
     fixTr(`Kiralama Tarihi  : ${rentalDate}`)
@@ -98,11 +145,11 @@ export const generateRentalPDF = (req) => {
           fixTr('Eksiksiz / Test Edildi - Calisir Durumda')
         ];
       })
-    : [['1', fixTr('Secili Kiralama Ekipmanlari'), '1 Paket', fixTr('Calisir Durumda')]];
+    : [['1', fixTr('Seçili Kiralama Ekipmanları'), '1 Paket', fixTr('Çalışır Durumda')]];
 
   autoTable(doc, {
     startY: 81,
-    head: [[fixTr('#'), fixTr('Ekipman / Urun Tanimi'), fixTr('Adet'), fixTr('Teslimat ve Calisma Durumu')]],
+    head: [[fixTr('#'), fixTr('Ekipman / Ürün Tanımı'), fixTr('Adet'), fixTr('Teslimat ve Çalışma Durumu')]],
     body: tableBody,
     theme: 'grid',
     headStyles: { fillColor: [8, 145, 178], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8 },
@@ -112,12 +159,11 @@ export const generateRentalPDF = (req) => {
 
   const finalY = (doc.lastAutoTable && doc.lastAutoTable.finalY) ? doc.lastAutoTable.finalY + 8 : 140;
 
-  // Müşteri Notu varsa ekle
   if (req.notes) {
     doc.setFontSize(7.5);
     doc.setFont('helvetica', 'italic');
     doc.setTextColor(100, 116, 139);
-    doc.text(fixTr(`Musteri Ozel Notu: ${req.notes}`), 14, finalY);
+    doc.text(fixTr(`Müşteri Özel Notu: ${req.notes}`), 14, finalY);
   }
 
   const termsY = req.notes ? finalY + 7 : finalY;
@@ -126,13 +172,13 @@ export const generateRentalPDF = (req) => {
   doc.setFontSize(8);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(30, 41, 59);
-  doc.text(fixTr('KIRALAMA VE TESLIM TAAHHUTLERI:'), 14, termsY);
+  doc.text(fixTr('KİRALAMA VE TESLİM TAAHHÜTLERİ:'), 14, termsY);
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7);
   doc.setTextColor(71, 85, 105);
   const terms = [
-    fixTr('1. Kiralayan musteri, yukarida belirtilen ekipmanlari fiziki ve calisma kontrollerini yaparak eksiksiz teslim almistir.'),
+    fixTr('1. Kiralayan müşteri, yukarıda belirtilen ekipmanlari fiziki ve çalışma kontrollerini yaparak eksiksiz teslim almıştır.'),
     fixTr('2. Kullanim sirasinda meydana gelebilecek ariza, kirilma, hasar veya sivi temasi masraflari kiralayana aittir.'),
     fixTr('3. Belirtilen teslim saatinde iade edilmeyen ekipmanlar icin gecikilen her gun/saat cari kiralama bedeli tahakkuk ettirilir.'),
     fixTr('4. Isbu sozlesme tutanagi taraflarca okunup mutabik kalinarak 2 (iki) nusha halinde imza altina alinmistir.')
@@ -144,14 +190,13 @@ export const generateRentalPDF = (req) => {
   doc.setFontSize(8);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(30, 41, 59);
-  doc.text(fixTr('TESLIM EDEN (Aqua Medya Yetkilisi)'), 20, signY);
-  doc.text(fixTr('TESLIM ALAN (Musteri / Kase & Imza)'), 120, signY);
+  doc.text(fixTr('TESLİM EDEN (Aqua Medya Yetkilisi)'), 20, signY);
+  doc.text(fixTr('TESLİM ALAN (Müşteri / Kase & Imza)'), 120, signY);
 
   doc.setFont('helvetica', 'normal');
   doc.text('Imza: _______________________', 20, signY + 12);
   doc.text('Imza: _______________________', 120, signY + 12);
 
-  // İndirme
-  const safeCustomer = fixTr(customerName).replace(/[^a-zA-Z0-9]/g, '_');
+  const safeCustomer = fixTr(rawCustomer).replace(/[^a-zA-Z0-9]/g, '_');
   doc.save(`AquaMedya_${contractNo}_${safeCustomer}.pdf`);
 };

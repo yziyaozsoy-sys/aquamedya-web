@@ -128,57 +128,70 @@ function App() {
   });
 
      // Fiyat metninden temiz sayı çıkaran yardımcı fonksiyon ("2.500 TL" veya "2500 ₺" -> 2500)
-  const parseSafePrice = (val) => {
+   const parseSafePrice = (val) => {
     if (!val && val !== 0) return 0;
     if (typeof val === 'number') return val;
-    // Harfleri, para birimlerini ve boşlukları at, sadece rakam, nokta ve virgül bırak
     let clean = String(val).replace(/[^0-9.,]/g, '').trim();
     if (!clean) return 0;
-    // Eğer 1.500 gibi binlik ayraç varsa ve virgül yoksa noktayı temizle
-    if (clean.includes('.') && !clean.includes(',')) {
+    if (clean.includes('.') && clean.includes(',')) {
+      clean = clean.replace(/\./g, '').replace(',', '.');
+    } else if (clean.includes(',')) {
+      clean = clean.replace(',', '.');
+    } else if (clean.includes('.')) {
       const parts = clean.split('.');
       if (parts[parts.length - 1].length === 3) {
         clean = clean.replace(/\./g, '');
       }
     }
-    // Türk Lirası virgüllü ondalığı noktaya çevir
-    clean = clean.replace(/\./g, '').replace(',', '.');
     return parseFloat(clean) || 0;
   };
 
-  // Seçili Dönem Ciro & KDV Hesaplama Motoru
+  const normalizeStr = (s) => {
+    if (!s) return '';
+    return String(s)
+      .toLowerCase()
+      .replace(/ğ/g, 'g')
+      .replace(/ü/g, 'u')
+      .replace(/ş/g, 's')
+      .replace(/ı/g, 'i')
+      .replace(/ö/g, 'o')
+      .replace(/ç/g, 'c')
+      .replace(/[^a-z0-9]/g, '')
+      .trim();
+  };
+
   const calculateFinancials = () => {
     let subtotal = 0;
 
     filteredRequests.forEach((req) => {
-      // 1. Talep üzerinde doğrudan fiyat varsa öncelikli olarak al
+      // 1. Talep üzerinde fiyat varsa doğrudan al
       const directPrice = parseSafePrice(req.totalPrice || req.price || req.amount);
       if (directPrice > 0) {
         subtotal += directPrice;
         return;
       }
 
-      // 2. Talepteki ekipman isimlerini ayıkla (virgüllü veya dizi)
+      // 2. Ekipman isimlerini al
       let itemsList = [];
       if (Array.isArray(req.item)) {
         itemsList = req.item;
       } else if (typeof req.item === 'string') {
         itemsList = req.item.split(',').map(s => s.trim());
+      } else if (Array.isArray(req.equipment)) {
+        itemsList = req.equipment;
       }
 
       itemsList.forEach((reqItemName) => {
         if (!reqItemName) return;
-        const target = reqItemName.trim().toLowerCase();
+        const target = normalizeStr(typeof reqItemName === 'string' ? reqItemName : reqItemName.name);
 
-        // Kataloğumuzdaki ekipmanla eşleştir
         const matched = equipmentCatalog.find((eq) => {
           if (!eq || !eq.name) return false;
-          const catalogName = eq.name.trim().toLowerCase();
-          // Birebir eşitlik, veya biri diğerini kapsıyor mu?
+          const catalogName = normalizeStr(eq.name);
           return (
             catalogName === target ||
-            target.includes(catalogName) ||
-            catalogName.includes(target)
+            catalogName.includes(target) ||
+            target.includes(catalogName)
           );
         });
 
@@ -190,7 +203,6 @@ function App() {
 
     const kdv = subtotal * 0.20;
     const grandTotal = subtotal + kdv;
-
     return { subtotal, kdv, grandTotal };
   };
 
@@ -1499,28 +1511,6 @@ photoPreview: eq.photo ? getImageUrl(eq.photo) : null,
                   </div>
                 )}
 {/* FİNANSAL MALİYET VE CİRO RAPOR KARTI */}
-{can('viewFinances') && (
-  <div className="mb-6 grid grid-cols-1 md:grid-cols-3 gap-4">
-    <div className="p-4 bg-white border border-slate-200 rounded-2xl shadow-sm">
-      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Seçili Dönem Ara Toplam</p>
-      <p className="text-2xl font-black text-slate-800 mt-1">
-        {reportSubtotal.toLocaleString('tr-TR')} <span className="text-sm font-semibold text-slate-500">₺</span>
-      </p>
-    </div>
-    <div className="p-4 bg-white border border-slate-200 rounded-2xl shadow-sm">
-      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Tahmini KDV (%20)</p>
-      <p className="text-2xl font-black text-cyan-600 mt-1">
-        {reportKdv.toLocaleString('tr-TR')} <span className="text-sm font-semibold text-slate-500">₺</span>
-      </p>
-    </div>
-    <div className="p-4 bg-gradient-to-br from-slate-900 to-slate-800 text-white border border-slate-800 rounded-2xl shadow-sm">
-      <p className="text-xs font-semibold text-slate-300 uppercase tracking-wider">Toplam Kiralama Cirosu</p>
-      <p className="text-2xl font-black text-emerald-400 mt-1">
-        {reportGrandTotal.toLocaleString('tr-TR')} <span className="text-sm font-semibold text-slate-300">₺</span>
-      </p>
-    </div>
-  </div>
-)}
 
                 {/* TALEPLER LİSTESİ */}
                 <div className="space-y-4">
