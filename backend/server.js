@@ -120,7 +120,7 @@ app.use(express.json());
 cloudinary.config({
   cloud_name: 'fwqrvwf7',
   api_key: '723196441566917',
-  api_secret: process.env.CLOUDINARY_API_SECRET || 'y39qbHnWFZJQJr79llagKE7HfEQ'
+  api_secret: 'y39qbHnWFZJQJr79llagKE7HlEQ' // l harfi düzeltildi
 });
 
 // Resimleri buluta (Cloudinary) yükleyecek depolama motoru (İmza hatası düzeltildi)
