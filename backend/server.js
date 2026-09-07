@@ -115,9 +115,6 @@ async function sendApprovalEmail(requestData, approverName) {
 
 app.use(cors());
 app.use(express.json());
-
-const cloudinary = require('cloudinary').v2;
-
 // --- CLOUDINARY YAPILANDIRMASI ---
 cloudinary.config({
   cloud_name: 'fwqrvwf7',
