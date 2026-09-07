@@ -1498,6 +1498,29 @@ photoPreview: eq.photo ? getImageUrl(eq.photo) : null,
                     </div>
                   </div>
                 )}
+{/* FİNANSAL MALİYET VE CİRO RAPOR KARTI */}
+{can('viewFinances') && (
+  <div className="mb-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+    <div className="p-4 bg-white border border-slate-200 rounded-2xl shadow-sm">
+      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Seçili Dönem Ara Toplam</p>
+      <p className="text-2xl font-black text-slate-800 mt-1">
+        {reportSubtotal.toLocaleString('tr-TR')} <span className="text-sm font-semibold text-slate-500">₺</span>
+      </p>
+    </div>
+    <div className="p-4 bg-white border border-slate-200 rounded-2xl shadow-sm">
+      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Tahmini KDV (%20)</p>
+      <p className="text-2xl font-black text-cyan-600 mt-1">
+        {reportKdv.toLocaleString('tr-TR')} <span className="text-sm font-semibold text-slate-500">₺</span>
+      </p>
+    </div>
+    <div className="p-4 bg-gradient-to-br from-slate-900 to-slate-800 text-white border border-slate-800 rounded-2xl shadow-sm">
+      <p className="text-xs font-semibold text-slate-300 uppercase tracking-wider">Toplam Kiralama Cirosu</p>
+      <p className="text-2xl font-black text-emerald-400 mt-1">
+        {reportGrandTotal.toLocaleString('tr-TR')} <span className="text-sm font-semibold text-slate-300">₺</span>
+      </p>
+    </div>
+  </div>
+)}
 
                 {/* TALEPLER LİSTESİ */}
                 <div className="space-y-4">

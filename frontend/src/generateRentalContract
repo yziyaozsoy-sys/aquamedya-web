@@ -1,81 +1,108 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
-export const generateRentalPDF = (order) => {
+// Türkçe Karakterleri jsPDF Uyumlu Temiz Harflere Dönüştürücü
+const fixTr = (text) => {
+  if (!text) return '';
+  return String(text)
+    .replace(/ğ/g, 'g').replace(/Ğ/g, 'G')
+    .replace(/ü/g, 'u').replace(/Ü/g, 'U')
+    .replace(/ş/g, 's').replace(/Ş/g, 'S')
+    .replace(/ı/g, 'i').replace(/İ/g, 'I')
+    .replace(/ö/g, 'o').replace(/Ö/g, 'O')
+    .replace(/ç/g, 'c').replace(/Ç/g, 'C');
+};
+
+export const generateRentalPDF = (req) => {
   const doc = new jsPDF();
 
   // --- ÜST BANNER (Slate-900) ---
   doc.setFillColor(15, 23, 42);
   doc.rect(0, 0, 210, 36, 'F');
 
+  // Modern Vektörel Logo Rozeti (Sol Üst)
+  doc.setFillColor(8, 145, 178); // Cyan-600
+  doc.roundedRect(14, 8, 18, 18, 3, 3, 'F');
   doc.setTextColor(255, 255, 255);
-  doc.setFontSize(16);
+  doc.setFontSize(11);
   doc.setFont('helvetica', 'bold');
-  doc.text('EKIPMAN KIRALAMA VE TESLIM TUTANAGI', 14, 18);
+  doc.text('AQ', 17.5, 20);
 
-  doc.setFontSize(9);
+  // Başlıklar
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(14);
+  doc.setFont('helvetica', 'bold');
+  doc.text(fixTr('EKIPMAN KIRALAMA VE TESLIM TUTANAGI'), 38, 18);
+
+  doc.setFontSize(8.5);
   doc.setFont('helvetica', 'normal');
-  doc.text('AQUA MEDYA TICARET LIMITED SIRKETI', 14, 25);
+  doc.setTextColor(148, 163, 184); // Slate-400
+  doc.text(fixTr('AQUA MEDYA TICARET LIMITED SIRKETI'), 38, 25);
 
-  const contractNo = `KRL-${(order._id || order.id || Date.now().toString()).slice(-6).toUpperCase()}`;
+  const contractNo = `KRL-${(req._id || req.id || Date.now().toString()).slice(-6).toUpperCase()}`;
   doc.setFontSize(8);
-  doc.text(`Belge No : ${contractNo}`, 145, 17);
-  doc.text(`Duzenleme: ${new Date().toLocaleDateString('tr-TR')}`, 145, 23);
+  doc.setTextColor(255, 255, 255);
+  doc.text(fixTr(`Belge No : ${contractNo}`), 145, 17);
+  doc.text(fixTr(`Tarih    : ${new Date().toLocaleDateString('tr-TR')}`), 145, 23);
 
-  // --- TARAFLAR BİLGİ KUTUSU ---
+  // --- TARAFLAR KUTUSU ---
   doc.setTextColor(30, 41, 59);
   doc.setFontSize(9);
   doc.setFont('helvetica', 'bold');
-  doc.text('KIRALAYAN (FIRMA):', 14, 46);
-  doc.text('KIRALAYAN MUSTERI / KURUM:', 110, 46);
+  doc.text(fixTr('KIRALAYAN (FIRMA BILGILERI):'), 14, 46);
+  doc.text(fixTr('KIRALAYAN MUSTERI / KURUM:'), 110, 46);
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
+  doc.setTextColor(51, 65, 85);
   doc.text([
-    'AQUA MEDYA TIC. LTD. STI.',
-    'Merkez Mah. Seckin Sok. Z Ofis No:2-4/90',
-    'Kagithane / ISTANBUL',
-    'Tel: 0 212 325 25 25 / info@aquamedya.com.tr'
+    fixTr('AQUA MEDYA TIC. LTD. STI.'),
+    fixTr('Merkez Mah. Seckin Sok. Z Ofis No:2-4/90'),
+    fixTr('Kagithane / ISTANBUL'),
+    fixTr('Tel: 0 212 325 25 25 / GSM: 0 532 011 01 01'),
+    fixTr('E-posta: info@aquamedya.com.tr')
   ], 14, 52);
 
-  const customerName = order.name || order.customerName || order.userName || 'Musteri Belirtilmedi';
-  const customerPhone = order.phone || order.customerPhone || '-';
-  const rentalDate = order.date ? `${order.date} ${order.time || ''}` : (order.startDate ? `${order.startDate} - ${order.endDate}` : '-');
-  const deliveryPlace = order.deliveryLocation || order.deliveryType || 'Ofisten Teslim';
+  // Müşteri Bilgilerini Kapsamlı Çözümleme (Tüm olası anahtarlar taranır)
+  const customerName = req.customer || req.name || req.customerName || req.userName || 'Musteri Belirtilmedi';
+  const customerPhone = req.phone || req.telephone || req.tel || req.customerPhone || req.userPhone || req.memberPhone || '-';
+  const customerEmail = req.email || req.mail || req.customerEmail || req.userEmail || '-';
+  const rentalDate = `${req.date || '-'} ${req.time ? `(${req.time})` : ''}`;
+  const deliveryPlace = req.location === 'MERKEZDEN_TESLIM' ? 'Merkezden Kendisi Alacak' : (req.location || 'Ofisten Teslim');
 
   doc.text([
-    `Yetkili: ${customerName}`,
-    `Telefon: ${customerPhone}`,
-    `Teslim Yeri: ${deliveryPlace}`,
-    `Kiralama Tarihi: ${rentalDate}`
+    fixTr(`Ad Soyad / Firma: ${customerName}`),
+    fixTr(`Telefon          : ${customerPhone}`),
+    fixTr(`E-posta          : ${customerEmail}`),
+    fixTr(`Teslimat Yeri    : ${deliveryPlace}`),
+    fixTr(`Kiralama Tarihi  : ${rentalDate}`)
   ], 110, 52);
 
   // Çizgi
   doc.setDrawColor(226, 232, 240);
-  doc.line(14, 73, 196, 73);
+  doc.line(14, 76, 196, 76);
 
   // --- EKİPMAN LİSTESİ TABLOSU ---
   let rawItems = [];
-  if (Array.isArray(order.equipment)) rawItems = order.equipment;
-  else if (Array.isArray(order.item)) rawItems = order.item;
-  else if (typeof order.item === 'string') rawItems = order.item.split(',').map(s => s.trim());
-  else if (typeof order.equipment === 'string') rawItems = order.equipment.split(',').map(s => s.trim());
+  if (Array.isArray(req.item)) rawItems = req.item;
+  else if (typeof req.item === 'string') rawItems = req.item.split(',').map(s => s.trim());
+  else if (Array.isArray(req.equipment)) rawItems = req.equipment;
 
   const tableBody = rawItems.length > 0
     ? rawItems.map((item, idx) => {
         const title = typeof item === 'string' ? item : (item.name || 'Ekipman');
         return [
           (idx + 1).toString(),
-          title,
+          fixTr(title),
           '1 Adet',
-          'Eksiksiz / Test Edildi - Calisir Durumda'
+          fixTr('Eksiksiz / Test Edildi - Calisir Durumda')
         ];
       })
-    : [['1', 'Secili Kiralama Ekipmanlari', '1 Paket', 'Calisir Durumda']];
+    : [['1', fixTr('Secili Kiralama Ekipmanlari'), '1 Paket', fixTr('Calisir Durumda')]];
 
   autoTable(doc, {
-    startY: 78,
-    head: [['#', 'Ekipman / Urun Tanimi', 'Adet', 'Teslimat ve Fiziksel Durumu']],
+    startY: 81,
+    head: [[fixTr('#'), fixTr('Ekipman / Urun Tanimi'), fixTr('Adet'), fixTr('Teslimat ve Calisma Durumu')]],
     body: tableBody,
     theme: 'grid',
     headStyles: { fillColor: [8, 145, 178], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8 },
@@ -83,35 +110,48 @@ export const generateRentalPDF = (order) => {
     alternateRowStyles: { fillColor: [248, 250, 252] }
   });
 
-  const finalY = (doc.lastAutoTable && doc.lastAutoTable.finalY) ? doc.lastAutoTable.finalY + 10 : 140;
+  const finalY = (doc.lastAutoTable && doc.lastAutoTable.finalY) ? doc.lastAutoTable.finalY + 8 : 140;
+
+  // Müşteri Notu varsa ekle
+  if (req.notes) {
+    doc.setFontSize(7.5);
+    doc.setFont('helvetica', 'italic');
+    doc.setTextColor(100, 116, 139);
+    doc.text(fixTr(`Musteri Ozel Notu: ${req.notes}`), 14, finalY);
+  }
+
+  const termsY = req.notes ? finalY + 7 : finalY;
 
   // --- SÖZLEŞME VE TAAHHÜT ŞARTLARI ---
   doc.setFontSize(8);
   doc.setFont('helvetica', 'bold');
-  doc.text('KIRALAMA VE TESLIM TAAHHUTLERI:', 14, finalY);
+  doc.setTextColor(30, 41, 59);
+  doc.text(fixTr('KIRALAMA VE TESLIM TAAHHUTLERI:'), 14, termsY);
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7);
+  doc.setTextColor(71, 85, 105);
   const terms = [
-    '1. Kiralayan musteri, yukarida belirtilen ekipmanlari fiziki ve teknik muayenesini yaparak eksiksiz teslim almistir.',
-    '2. Kullanim esnasinda olusabilecek ariza, darbe, sivi temasi ve hasarlardan dogacak masraflar kiralayan tarafindan karsilanir.',
-    '3. Ekipmanin suresi icerisinde iade edilmemesi durumunda her gecikilen gun icin cari kiralama bedeli tahakkuk ettirilir.',
-    '4. Isbu tutanak 2 (iki) nusha olarak tanzim edilmis ve taraflarca imza altina alinmistir.'
+    fixTr('1. Kiralayan musteri, yukarida belirtilen ekipmanlari fiziki ve calisma kontrollerini yaparak eksiksiz teslim almistir.'),
+    fixTr('2. Kullanim sirasinda meydana gelebilecek ariza, kirilma, hasar veya sivi temasi masraflari kiralayana aittir.'),
+    fixTr('3. Belirtilen teslim saatinde iade edilmeyen ekipmanlar icin gecikilen her gun/saat cari kiralama bedeli tahakkuk ettirilir.'),
+    fixTr('4. Isbu sozlesme tutanagi taraflarca okunup mutabik kalinarak 2 (iki) nusha halinde imza altina alinmistir.')
   ];
-  doc.text(terms, 14, finalY + 5);
+  doc.text(terms, 14, termsY + 5);
 
   // --- İMZA ALANI ---
-  const signY = finalY + 28;
+  const signY = termsY + 28;
   doc.setFontSize(8);
   doc.setFont('helvetica', 'bold');
-  doc.text('TESLIM EDEN (Aqua Medya Yetkilisi)', 20, signY);
-  doc.text('TESLIM ALAN (Musteri / Kase & Imza)', 120, signY);
+  doc.setTextColor(30, 41, 59);
+  doc.text(fixTr('TESLIM EDEN (Aqua Medya Yetkilisi)'), 20, signY);
+  doc.text(fixTr('TESLIM ALAN (Musteri / Kase & Imza)'), 120, signY);
 
   doc.setFont('helvetica', 'normal');
   doc.text('Imza: _______________________', 20, signY + 12);
   doc.text('Imza: _______________________', 120, signY + 12);
 
-  // Dosyayı İndir
-  const safeCustomer = (customerName || 'Musteri').replace(/[^a-zA-Z0-9]/g, '_');
-  doc.save(`AquaMedya_Kiralama_${contractNo}_${safeCustomer}.pdf`);
+  // İndirme
+  const safeCustomer = fixTr(customerName).replace(/[^a-zA-Z0-9]/g, '_');
+  doc.save(`AquaMedya_${contractNo}_${safeCustomer}.pdf`);
 };
