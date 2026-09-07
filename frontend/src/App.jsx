@@ -521,7 +521,8 @@ function App() {
       price: parsedPrice, 
       stock: eq.stock, 
       photoFile: null,
-      photoPreview: eq.photo ? (API_URL + eq.photo) : null, 
+      // DOĞRU HALİ:
+photoPreview: eq.photo ? getImageUrl(eq.photo) : null,
       videoUrl: eq.videoUrl || ''
     });
   };
@@ -784,12 +785,18 @@ function App() {
                   return (
                     <div key={eq._id || eq.id} className={"bg-white rounded-2xl shadow-sm border transition overflow-hidden flex flex-col justify-between " + (isSelected ? 'border-cyan-500 ring-2 ring-cyan-200' : 'border-slate-200 hover:shadow-md')}>
                       <div>
-                        <div className="bg-slate-100 h-44 flex items-center justify-center overflow-hidden relative">
-                          {eq.photo ? (
-                            <img src={API_URL + eq.photo} alt={eq.name} className="w-full h-full object-cover" />
-                          ) : (
-                            <IconComp className="text-slate-400" size={54} />
-                          )}
+                       // DOĞRU HALİ:
+<div className="bg-slate-100 h-44 flex items-center justify-center overflow-hidden relative">
+  {eq.photo ? (
+    <img 
+      src={getImageUrl(eq.photo)} 
+      alt={eq.name} 
+      className="w-full h-full object-cover" 
+    />
+  ) : (
+    <IconComp className="text-slate-400" size={54} />
+  )}
+</div>
                           <span className="absolute top-3 left-3 text-[11px] font-bold text-blue-900 bg-white/95 backdrop-blur-sm px-2.5 py-1 rounded-full shadow-sm border border-slate-100">
                             {eq.category}
                           </span>
