@@ -123,16 +123,26 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET || 'y39qbHnWFZJQJr79llagKE7HfEQ'
 });
 
-// Resimleri buluta (Cloudinary) yükleyecek depolama motoru
+// Resimleri buluta (Cloudinary) yükleyecek depolama motoru (İmza hatası düzeltildi)
 const storage = new CloudinaryStorage({
   cloudinary: cloudinary,
   params: {
     folder: 'aquamedya_ekipmanlar',
-    allowed_formats: ['jpg', 'png', 'jpeg', 'webp']
+    format: async (req, file) => {
+      const ext = file.mimetype.split('/')[1];
+      return ['jpeg', 'jpg', 'png', 'webp'].includes(ext) ? ext : 'jpg';
+    },
+    public_id: (req, file) => {
+      const cleanName = file.originalname.split('.')[0].replace(/[^a-zA-Z0-9]/g, '_');
+      return `${Date.now()}_${cleanName}`;
+    }
   }
 });
 
-const upload = multer({ storage: storage });
+const upload = multer({ 
+  storage: storage,
+  limits: { fileSize: 5 * 1024 * 1024 }
+});
 
 const defaultPermissions = {
   equipmentView: true, equipmentAdd: false, equipmentEdit: false,
