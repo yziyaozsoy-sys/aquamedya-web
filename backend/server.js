@@ -116,15 +116,21 @@ async function sendApprovalEmail(requestData, approverName) {
 app.use(cors());
 app.use(express.json());
 // --- CLOUDINARY YAPILANDIRMASI ---
-if (process.env.CLOUDINARY_URL) {
-  cloudinary.config(); // CLOUDINARY_URL tanımlıysa otomatik okur
-} else {
-  cloudinary.config({
-    cloud_name: 'fwqrvwf7',
-    api_key: '723196441566917',
-    api_secret: 'y39qbHnWFZJQJr79llagKE7HlEQ'
-  });
-}
+const apiSecret = (process.env.CLOUDINARY_API_SECRET || '').trim();
+
+cloudinary.config({
+  cloud_name: 'fwqrvwf7',
+  api_key: '723196441566917',
+  api_secret: apiSecret
+});
+
+// Güvenlik ve Hata Tespiti Logu (Render Logs'ta görebilmek için)
+console.log('Cloudinary Yapılandırması:', {
+  cloud_name: 'fwqrvwf7',
+  api_key: '723196441566917',
+  secret_var_mi: !!apiSecret,
+  secret_uzunluk: apiSecret.length
+});
 
 // Dosyayı belleğe (RAM) alan güvenli multer depolaması
 const storage = multer.memoryStorage();
