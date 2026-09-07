@@ -563,7 +563,7 @@ photoPreview: eq.photo ? getImageUrl(eq.photo) : null,
   const cancelStaffEdit = () => { setEditingStaffId(null); setNewStaff(emptyNewStaff); setStaffFormError(''); };
 
   const equipmentList = equipmentCatalog.map(e => e.name);
-  // Finansal Rapor Hesaplama (Tüm state'ler oluştuktan sonra en altta güvenle çalışır)
+   // Finansal Rapor Hesaplama (Tüm state'ler oluştuktan sonra en altta güvenle çalışır)
   const calculateSafeTotals = () => {
     let subtotal = 0;
     const reqList = (typeof filteredRequests !== 'undefined' && Array.isArray(filteredRequests)) 
@@ -612,7 +612,12 @@ photoPreview: eq.photo ? getImageUrl(eq.photo) : null,
     return { subtotal, kdv, grandTotal };
   };
 
+  // İŞTE BURASI: Hem reportStats hem de reportSubtotal / reportKdv / reportGrandTotal tanımlanıyor!
   const reportStats = calculateSafeTotals();
+  const reportSubtotal = reportStats.subtotal;
+  const reportKdv = reportStats.kdv;
+  const reportGrandTotal = reportStats.grandTotal;
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800">
       {/* HEADER */}
