@@ -116,7 +116,12 @@ app.use(express.json());
 
 const uploadsDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir);
-app.use('/uploads', express.static(uploadsDir));
+// RESİMLERİN TARAYICI TARAFINDAN ENGELLENMESİNİ ÖNLEYEN STATİK DİZİN AYARI
+app.use('/uploads', (req, res, next) => {
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  next();
+}, express.static(path.join(__dirname, 'uploads')));
 
 const defaultPermissions = {
   equipmentView: true, equipmentAdd: false, equipmentEdit: false,
