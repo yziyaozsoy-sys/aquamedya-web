@@ -125,7 +125,7 @@ app.use('/uploads', (req, res, next) => {
 
 const defaultPermissions = {
   equipmentView: true, equipmentAdd: false, equipmentEdit: false,
-  equipmentDelete: false, requestsView: false, requestsManage: false
+  equipmentDelete: false, requestsView: false, requestsManage: false,  costsView: false //
 };
 
 const storage = multer.diskStorage({
