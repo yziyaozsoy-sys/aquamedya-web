@@ -116,11 +116,15 @@ async function sendApprovalEmail(requestData, approverName) {
 app.use(cors());
 app.use(express.json());
 // --- CLOUDINARY YAPILANDIRMASI ---
-cloudinary.config({
-  cloud_name: 'fwqrvwf7',
-  api_key: '723196441566917',
-  api_secret: process.env.CLOUDINARY_API_SECRET || 'y39qbHnWFZJQJr79llagKE7HlEQ'
-});
+if (process.env.CLOUDINARY_URL) {
+  cloudinary.config(); // CLOUDINARY_URL tanımlıysa otomatik okur
+} else {
+  cloudinary.config({
+    cloud_name: 'fwqrvwf7',
+    api_key: '723196441566917',
+    api_secret: 'y39qbHnWFZJQJr79llagKE7HlEQ'
+  });
+}
 
 // Dosyayı belleğe (RAM) alan güvenli multer depolaması
 const storage = multer.memoryStorage();
