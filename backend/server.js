@@ -2,6 +2,8 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const multer = require('multer');
+const cloudinary = require('cloudinary').v2; // ✅ Cloudinary eklendi
+const { CloudinaryStorage } = require('multer-storage-cloudinary'); // ✅ Cloudinary Storage eklendi
 const path = require('path');
 const fs = require('fs');
 const jwt = require('jsonwebtoken');
@@ -114,18 +116,27 @@ async function sendApprovalEmail(requestData, approverName) {
 app.use(cors());
 app.use(express.json());
 
-const uploadsDir = path.join(__dirname, 'uploads');
-if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir);
-// RESİMLERİN TARAYICI TARAFINDAN ENGELLENMESİNİ ÖNLEYEN STATİK DİZİN AYARI
-app.use('/uploads', (req, res, next) => {
-  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  next();
-}, express.static(path.join(__dirname, 'uploads')));
+// --- CLOUDINARY YAPILANDIRMASI ---
+cloudinary.config({
+  cloud_name: 'fwqrvwf7',
+  api_key: '723196441566917',
+  api_secret: process.env.CLOUDINARY_API_SECRET || 'y39qbHnWFZJQJr79llagKE7HfEQ'
+});
+
+// Resimleri buluta (Cloudinary) yükleyecek depolama motoru
+const storage = new CloudinaryStorage({
+  cloudinary: cloudinary,
+  params: {
+    folder: 'aquamedya_ekipmanlar',
+    allowed_formats: ['jpg', 'png', 'jpeg', 'webp']
+  }
+});
+
+const upload = multer({ storage: storage });
 
 const defaultPermissions = {
   equipmentView: true, equipmentAdd: false, equipmentEdit: false,
-  equipmentDelete: false, requestsView: false, requestsManage: false, viewFinances: false // <-- Buraya da viewFinances ekle
+  equipmentDelete: false, requestsView: false, requestsManage: false, viewFinances: false
 };
 
 const storage = multer.diskStorage({
@@ -213,33 +224,50 @@ app.get('/api/equipment', async (req, res) => {
   const list = await Equipment.find();
   res.json(list);
 });
-
 app.post('/api/equipment', authMiddleware, requirePermission('equipmentAdd'), upload.single('photo'), async (req, res) => {
-  const { name, category, price, stock, specs, videoUrl } = req.body;
-  const photoUrl = req.file ? `/uploads/${req.file.filename}` : null;
-  const newItem = await Equipment.create({
-    name, category, price,
-    stock: parseInt(stock) || 0,
-    specs: specs ? JSON.parse(specs) : [],
-    rating: 4.5, photo: photoUrl, videoUrl: videoUrl || ''
-  });
-  res.json(newItem);
+  try {
+    const { name, category, price, stock, specs, videoUrl } = req.body;
+    // Cloudinary doğrudan resmin kalıcı internet linkini req.file.path ile verir:
+    const photoUrl = req.file ? req.file.path : null;
+
+    const newItem = await Equipment.create({
+      name, 
+      category, 
+      price,
+      stock: parseInt(stock) || 0,
+      specs: specs ? JSON.parse(specs) : [],
+      rating: 4.5, 
+      photo: photoUrl, 
+      videoUrl: videoUrl || ''
+    });
+    res.json(newItem);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.put('/api/equipment/:id', authMiddleware, requirePermission('equipmentEdit'), upload.single('photo'), async (req, res) => {
-  const { name, category, price, stock, specs, videoUrl } = req.body;
-  const item = await Equipment.findById(req.params.id);
-  if (!item) return res.status(404).json({ error: 'Bulunamadı' });
+  try {
+    const { name, category, price, stock, specs, videoUrl } = req.body;
+    const item = await Equipment.findById(req.params.id);
+    if (!item) return res.status(404).json({ error: 'Bulunamadı' });
 
-  const photoUrl = req.file ? `/uploads/${req.file.filename}` : item.photo;
-  item.name = name; item.category = category; item.price = price;
-  item.stock = parseInt(stock) || 0;
-  item.specs = specs ? JSON.parse(specs) : item.specs;
-  item.photo = photoUrl;
-  item.videoUrl = videoUrl || item.videoUrl;
-  await item.save();
+    // Yeni dosya seçildiyse yeni Cloudinary linki, seçilmediyse eski link korunur:
+    const photoUrl = req.file ? req.file.path : item.photo;
 
-  res.json(item);
+    item.name = name; 
+    item.category = category; 
+    item.price = price;
+    item.stock = parseInt(stock) || 0;
+    item.specs = specs ? JSON.parse(specs) : item.specs;
+    item.photo = photoUrl;
+    item.videoUrl = videoUrl || item.videoUrl;
+    await item.save();
+
+    res.json(item);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.delete('/api/equipment/:id', authMiddleware, requirePermission('equipmentDelete'), async (req, res) => {
