@@ -140,21 +140,28 @@ const defaultPermissions = {
 };
 // --- Auth Middleware ---
 function authMiddleware(req, res, next) {
-  const token = req.headers['authorization']?.split(' ')[1];
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
   if (!token) return res.status(401).json({ error: 'Token gerekli' });
+
   try {
-    req.user = jwt.verify(token, JWT_SECRET);
+    const decoded = jwt.verify(token, JWT_SECRET);
+    req.user = decoded;
     next();
   } catch (e) {
-    return res.status(401).json({ error: 'Geçersiz token' });
+    return res.status(401).json({ error: 'Geçersiz veya süresi dolmuş token' });
   }
 }
 
-function adminOnly(req, res, next) {
-  if (req.user?.role !== 'admin') {
-    return res.status(403).json({ error: 'Bu işlem için admin yetkisi gerekli' });
-  }
-  next();
+// Esnek Yetki Kontrolü
+function requirePermission(perm) {
+  return (req, res, next) => {
+    // Admin ise veya ilgili izne sahipse izin ver
+    if (req.user && (req.user.role === 'admin' || req.user.permissions?.[perm])) {
+      return next();
+    }
+    return res.status(403).json({ error: 'Bu işlem için yetkiniz yok.' });
+  };
 }
 
 function requirePermission(permKey) {
@@ -242,36 +249,46 @@ app.put('/api/equipment/:id', authMiddleware, upload.single('photo'), async (req
       return res.status(403).json({ error: 'Bu işlem için yetkiniz yok.' });
     }
 
-    const { name, category, price, dailyRate, stock, specs, videoUrl, youtubeUrl } = req.body;
     const item = await Equipment.findById(req.params.id);
     if (!item) return res.status(404).json({ error: 'Ekipman bulunamadı' });
 
-    // 2. Yeni dosya yüklendiyse Cloudinary URL'i, yüklenmediyse eski görsel kalır
-    const photoUrl = req.file ? req.file.path : item.photo;
+    const { name, category, price, dailyRate, stock, specs, videoUrl, youtubeUrl } = req.body;
 
-    // 3. Specs alanını güvenli ayrıştırma (JSON veya satır satır metin)
-    let parsedSpecs = item.specs;
-    if (specs) {
-      try {
-        parsedSpecs = typeof specs === 'string' && specs.startsWith('[') ? JSON.parse(specs) : (Array.isArray(specs) ? specs : specs.split('\n'));
-      } catch (e) {
-        parsedSpecs = specs.split('\n');
-      }
+    // Fotoğraf kontrolü: Yeni yüklendiyse Cloudinary URL'i, yüklenmediyse mevcut olanı koru
+    if (req.file && req.file.path) {
+      item.photo = req.file.path;
     }
 
-    item.name = name || item.name;
-    item.category = category || item.category;
-    item.price = price !== undefined ? price : (dailyRate !== undefined ? dailyRate : item.price);
-    item.stock = stock !== undefined ? parseInt(stock) : item.stock;
-    item.specs = parsedSpecs;
-    item.photo = photoUrl;
-    item.videoUrl = videoUrl || youtubeUrl || item.videoUrl;
+    if (name) item.name = name;
+    if (category) item.category = category;
+    
+    // Fiyat ve stok sayısal kontrolü
+    const finalPrice = price !== undefined ? price : dailyRate;
+    if (finalPrice !== undefined) item.price = Number(finalPrice);
+    if (stock !== undefined) item.stock = parseInt(stock, 10);
+
+    // Video linki
+    const finalVideo = videoUrl || youtubeUrl;
+    if (finalVideo !== undefined) item.videoUrl = finalVideo;
+
+    // Specs formatlama (JSON string veya satır satır metin desteği)
+    if (specs !== undefined) {
+      if (Array.isArray(specs)) {
+        item.specs = specs;
+      } else if (typeof specs === 'string') {
+        try {
+          item.specs = specs.trim().startsWith('[') ? JSON.parse(specs) : specs.split('\n').map(s => s.trim()).filter(Boolean);
+        } catch (e) {
+          item.specs = specs.split('\n').map(s => s.trim()).filter(Boolean);
+        }
+      }
+    }
 
     await item.save();
     res.json(item);
   } catch (err) {
-    console.error('Güncelleme hatası:', err);
-    res.status(500).json({ error: err.message });
+    console.error('Ekipman Güncelleme Hatası:', err.message || err);
+    res.status(500).json({ error: err.message || 'Güncelleme sırasında hata oluştu' });
   }
 });
 
