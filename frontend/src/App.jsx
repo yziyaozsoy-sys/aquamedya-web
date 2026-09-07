@@ -160,43 +160,71 @@ function App() {
       .trim();
   };
 
+   // Metin temizleme yardımcı fonksiyonu (Türkçe ve boşluk toleransı)
+  const safeNormalize = (s) => {
+    if (!s) return '';
+    return String(s)
+      .toLowerCase()
+      .replace(/ğ/g, 'g').replace(/ü/g, 'u').replace(/ş/g, 's')
+      .replace(/ı/g, 'i').replace(/ö/g, 'o').replace(/ç/g, 'c')
+      .replace(/[^a-z0-9]/g, '')
+      .trim();
+  };
+
   const calculateFinancials = () => {
     let subtotal = 0;
 
-    filteredRequests.forEach((req) => {
-      // 1. Talep üzerinde fiyat varsa doğrudan al
-      const directPrice = parseSafePrice(req.totalPrice || req.price || req.amount);
+    // 1. Talepler dizisini güvenli yakala
+    const reqList = (typeof filteredRequests !== 'undefined' && Array.isArray(filteredRequests))
+      ? filteredRequests
+      : ((typeof rentalRequests !== 'undefined' && Array.isArray(rentalRequests)) ? rentalRequests : []);
+
+    // 2. Projedeki ekipman kataloğunu hangi isimle tutuluyorsa yakala
+    const catList = (typeof equipments !== 'undefined' && Array.isArray(equipments))
+      ? equipments
+      : ((typeof equipmentList !== 'undefined' && Array.isArray(equipmentList))
+          ? equipmentList
+          : ((typeof equipmentCatalog !== 'undefined' && Array.isArray(equipmentCatalog))
+              ? equipmentCatalog
+              : ((typeof products !== 'undefined' && Array.isArray(products)) ? products : [])));
+
+    reqList.forEach((req) => {
+      // Talep üzerinde doğrudan fiyat yazılmışsa al
+      const directPrice = parseSafePrice(req.totalPrice || req.price || req.amount || req.total);
       if (directPrice > 0) {
         subtotal += directPrice;
         return;
       }
 
-      // 2. Ekipman isimlerini al
+      // Talepteki ekipmanları listeye çevir
       let itemsList = [];
-      if (Array.isArray(req.item)) {
-        itemsList = req.item;
-      } else if (typeof req.item === 'string') {
-        itemsList = req.item.split(',').map(s => s.trim());
-      } else if (Array.isArray(req.equipment)) {
-        itemsList = req.equipment;
+      const rawItemData = req.item || req.equipment || req.items || req.equipments || '';
+      
+      if (Array.isArray(rawItemData)) {
+        itemsList = rawItemData;
+      } else if (typeof rawItemData === 'string') {
+        itemsList = rawItemData.split(',');
       }
 
-      itemsList.forEach((reqItemName) => {
-        if (!reqItemName) return;
-        const target = normalizeStr(typeof reqItemName === 'string' ? reqItemName : reqItemName.name);
+      itemsList.forEach((rawItem) => {
+        if (!rawItem) return;
+        const itemName = typeof rawItem === 'string' ? rawItem.trim() : (rawItem.name || '');
+        const targetClean = safeNormalize(itemName);
+        if (!targetClean) return;
 
-        const matched = equipmentCatalog.find((eq) => {
+        // Katalogdaki ürünlerle eşleştir
+        const matched = catList.find((eq) => {
           if (!eq || !eq.name) return false;
-          const catalogName = normalizeStr(eq.name);
+          const catClean = safeNormalize(eq.name);
           return (
-            catalogName === target ||
-            catalogName.includes(target) ||
-            target.includes(catalogName)
+            catClean === targetClean ||
+            catClean.includes(targetClean) ||
+            targetClean.includes(catClean)
           );
         });
 
         if (matched) {
-          subtotal += parseSafePrice(matched.price);
+          subtotal += parseSafePrice(matched.price || matched.dailyPrice || matched.fee);
         }
       });
     });
