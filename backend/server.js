@@ -8,15 +8,39 @@ const path = require('path');
 const fs = require('fs');
 const jwt = require('jsonwebtoken');
 const nodemailer = require('nodemailer');
+const mongoose = require('mongoose');
 const Member = require('./models/Members'); // ✅ DOĞRU
 const connectDB = require('./db');
 const Equipment = require('./models/Equipment');
 const Request = require('./models/Request');
 const Staff = require('./models/Staff');
 
+// --- REFERANS MODELİ (YENİ) ---
+const referenceSchema = new mongoose.Schema({
+  title: { type: String, required: true },
+  client: { type: String, default: '' },
+  category: { type: String, default: 'Reklam' },
+  description: { type: String, default: '' },
+  photo: { type: String, default: '' },
+  videoUrl: { type: String, default: '' },
+  createdAt: { type: Date, default: Date.now }
+});
+const Reference = mongoose.models.Reference || mongoose.model('Reference', referenceSchema);
+
 const app = express();
 const PORT = process.env.PORT || 4000;
 const JWT_SECRET = process.env.JWT_SECRET || 'gizli_anahtar';
+
+// Varsayılan İzinler
+const defaultPermissions = {
+  equipmentView: true,
+  equipmentAdd: false,
+  equipmentEdit: false,
+  equipmentDelete: false,
+  requestsView: false,
+  requestsManage: false,
+  viewFinances: false
+};
 
 // --- ŞİRKET BİLGİLERİ (SABİT) ---
 const COMPANY_INFO = {
@@ -115,6 +139,7 @@ async function sendApprovalEmail(requestData, approverName) {
 
 app.use(cors());
 app.use(express.json());
+
 // --- CLOUDINARY YAPILANDIRMASI ---
 const apiSecret = (process.env.CLOUDINARY_API_SECRET || '').trim();
 
@@ -124,7 +149,7 @@ cloudinary.config({
   api_secret: apiSecret
 });
 
-// Güvenlik ve Hata Tespiti Logu (Render Logs'ta görebilmek için)
+// Güvenlik ve Hata Tespiti Logu
 console.log('Cloudinary Yapılandırması:', {
   cloud_name: 'fwqrvwf7',
   api_key: '723196441566917',
@@ -140,11 +165,11 @@ const upload = multer({
 });
 
 // Cloudinary'ye doğrudan buffer yükleyen yardımcı fonksiyon
-const uploadToCloudinary = (fileBuffer) => {
+const uploadToCloudinary = (fileBuffer, folder = 'aquamedya_ekipmanlar') => {
   return new Promise((resolve, reject) => {
     const uploadStream = cloudinary.uploader.upload_stream(
       {
-        folder: 'aquamedya_ekipmanlar',
+        folder: folder,
         resource_type: 'image'
       },
       (error, result) => {
@@ -170,6 +195,7 @@ function authMiddleware(req, res, next) {
     return res.status(401).json({ error: 'Geçersiz veya süresi dolmuş token' });
   }
 }
+
 // Sadece Admin Yetkisi Kontrolü
 function adminOnly(req, res, next) {
   if (req.user && req.user.role === 'admin') {
@@ -179,22 +205,16 @@ function adminOnly(req, res, next) {
 }
 
 // Esnek Yetki Kontrolü
-function requirePermission(perm) {
-  return (req, res, next) => {
-    // Admin ise veya ilgili izne sahipse izin ver
-    if (req.user && (req.user.role === 'admin' || req.user.permissions?.[perm])) {
-      return next();
-    }
-    return res.status(403).json({ error: 'Bu işlem için yetkiniz yok.' });
-  };
-}
-
 function requirePermission(permKey) {
   return async (req, res, next) => {
     if (req.user?.role === 'admin') return next();
-    const staff = await Staff.findById(req.user.id);
-    if (staff?.permissions?.[permKey]) return next();
-    return res.status(403).json({ error: 'Bu işlem için yetkiniz yok' });
+    try {
+      const staff = await Staff.findById(req.user.id);
+      if (staff?.permissions?.[permKey]) return next();
+      return res.status(403).json({ error: 'Bu işlem için yetkiniz yok' });
+    } catch (e) {
+      return res.status(403).json({ error: 'Yetki kontrolü yapılamadı' });
+    }
   };
 }
 
@@ -221,7 +241,7 @@ app.post('/api/staff/login', async (req, res) => {
     const ok = await staff.comparePassword(password);
     if (!ok) return res.status(401).json({ error: 'Kullanıcı adı veya şifre hatalı' });
     const permissions = staff.role === 'admin'
-      ? { equipmentView: true, equipmentAdd: true, equipmentEdit: true, equipmentDelete: true, requestsView: true, requestsManage: true }
+      ? { equipmentView: true, equipmentAdd: true, equipmentEdit: true, equipmentDelete: true, requestsView: true, requestsManage: true, viewFinances: true }
       : staff.permissions;
 
     const token = jwt.sign(
@@ -237,7 +257,7 @@ app.post('/api/staff/login', async (req, res) => {
 app.get('/api/staff/me', authMiddleware, async (req, res) => {
   const staff = await Staff.findById(req.user.id);
   const permissions = req.user.role === 'admin'
-    ? { equipmentView: true, equipmentAdd: true, equipmentEdit: true, equipmentDelete: true, requestsView: true, requestsManage: true }
+    ? { equipmentView: true, equipmentAdd: true, equipmentEdit: true, equipmentDelete: true, requestsView: true, requestsManage: true, viewFinances: true }
     : staff?.permissions;
   res.json({ ...req.user, permissions });
 });
@@ -246,18 +266,23 @@ app.get('/api/equipment', async (req, res) => {
   const list = await Equipment.find();
   res.json(list);
 });
+
 app.post('/api/equipment', authMiddleware, requirePermission('equipmentAdd'), upload.single('photo'), async (req, res) => {
   try {
     const { name, category, price, stock, specs, videoUrl } = req.body;
-    // Cloudinary doğrudan resmin kalıcı internet linkini req.file.path ile verir:
-    const photoUrl = req.file ? req.file.path : null;
+    let photoUrl = null;
+
+    if (req.file) {
+      const result = await uploadToCloudinary(req.file.buffer, 'aquamedya_ekipmanlar');
+      photoUrl = result.secure_url;
+    }
 
     const newItem = await Equipment.create({
       name, 
       category, 
-      price,
+      price: Number(price) || 0,
       stock: parseInt(stock) || 0,
-      specs: specs ? JSON.parse(specs) : [],
+      specs: specs ? (Array.isArray(specs) ? specs : JSON.parse(specs)) : [],
       rating: 4.5, 
       photo: photoUrl, 
       videoUrl: videoUrl || ''
@@ -267,9 +292,9 @@ app.post('/api/equipment', authMiddleware, requirePermission('equipmentAdd'), up
     res.status(500).json({ error: err.message });
   }
 });
+
 app.put('/api/equipment/:id', authMiddleware, upload.single('photo'), async (req, res) => {
   try {
-    // Yetki Kontrolü
     if (req.user.role !== 'admin' && !req.user.permissions?.equipmentEdit) {
       return res.status(403).json({ error: 'Bu işlem için yetkiniz yok.' });
     }
@@ -281,10 +306,9 @@ app.put('/api/equipment/:id', authMiddleware, upload.single('photo'), async (req
 
     const { name, category, price, dailyRate, stock, specs, videoUrl, youtubeUrl } = req.body;
 
-    // Fotoğraf yükleme (Doğrudan Cloudinary Stream)
     if (req.file) {
       try {
-        const result = await uploadToCloudinary(req.file.buffer);
+        const result = await uploadToCloudinary(req.file.buffer, 'aquamedya_ekipmanlar');
         item.photo = result.secure_url;
       } catch (uploadErr) {
         console.error('Cloudinary doğrudan yükleme hatası:', uploadErr);
@@ -292,11 +316,9 @@ app.put('/api/equipment/:id', authMiddleware, upload.single('photo'), async (req
       }
     }
 
-    // İsim ve Kategori
     if (name) item.name = name;
     if (category) item.category = category;
 
-    // Fiyat ve Stok
     const finalPrice = price !== undefined ? price : dailyRate;
     if (finalPrice !== undefined && finalPrice !== '') {
       item.price = Number(finalPrice);
@@ -305,13 +327,11 @@ app.put('/api/equipment/:id', authMiddleware, upload.single('photo'), async (req
       item.stock = parseInt(stock, 10);
     }
 
-    // Video URL
     const finalVideo = videoUrl !== undefined ? videoUrl : youtubeUrl;
     if (finalVideo !== undefined) {
       item.videoUrl = finalVideo;
     }
 
-    // Specs Güvenli Ayrıştırma
     if (specs !== undefined) {
       if (Array.isArray(specs)) {
         item.specs = specs;
@@ -336,6 +356,86 @@ app.put('/api/equipment/:id', authMiddleware, upload.single('photo'), async (req
     return res.status(500).json({ error: err.message || 'Sunucu hatası oluştu' });
   }
 });
+
+app.delete('/api/equipment/:id', authMiddleware, requirePermission('equipmentDelete'), async (req, res) => {
+  try {
+    await Equipment.findByIdAndDelete(req.params.id);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Ekipman silinemedi' });
+  }
+});
+
+// --- REFERANSLAR (YENİ ROUTE'LAR) ---
+app.get('/api/references', async (req, res) => {
+  try {
+    const list = await Reference.find().sort({ createdAt: -1 });
+    res.json(list);
+  } catch (err) {
+    res.status(500).json({ error: 'Referanslar getirilemedi.' });
+  }
+});
+
+app.post('/api/references', authMiddleware, upload.single('photo'), async (req, res) => {
+  try {
+    const { title, client, category, description, videoUrl } = req.body;
+    let photoUrl = '';
+
+    if (req.file) {
+      const result = await uploadToCloudinary(req.file.buffer, 'aquamedya_referanslar');
+      photoUrl = result.secure_url;
+    }
+
+    const newRef = await Reference.create({
+      title,
+      client: client || '',
+      category: category || 'Reklam',
+      description: description || '',
+      videoUrl: videoUrl || '',
+      photo: photoUrl
+    });
+
+    res.status(201).json(newRef);
+  } catch (err) {
+    console.error('Referans Ekleme Hatası:', err);
+    res.status(500).json({ error: 'Referans eklenemedi.' });
+  }
+});
+
+app.put('/api/references/:id', authMiddleware, upload.single('photo'), async (req, res) => {
+  try {
+    const { title, client, category, description, videoUrl } = req.body;
+    const refItem = await Reference.findById(req.params.id);
+    if (!refItem) return res.status(404).json({ error: 'Referans bulunamadı.' });
+
+    if (req.file) {
+      const result = await uploadToCloudinary(req.file.buffer, 'aquamedya_referanslar');
+      refItem.photo = result.secure_url;
+    }
+
+    if (title) refItem.title = title;
+    if (client !== undefined) refItem.client = client;
+    if (category) refItem.category = category;
+    if (description !== undefined) refItem.description = description;
+    if (videoUrl !== undefined) refItem.videoUrl = videoUrl;
+
+    await refItem.save();
+    res.json(refItem);
+  } catch (err) {
+    console.error('Referans Güncelleme Hatası:', err);
+    res.status(500).json({ error: 'Referans güncellenemedi.' });
+  }
+});
+
+app.delete('/api/references/:id', authMiddleware, async (req, res) => {
+  try {
+    await Reference.findByIdAndDelete(req.params.id);
+    res.json({ success: true, message: 'Referans silindi.' });
+  } catch (err) {
+    res.status(500).json({ error: 'Referans silinemedi.' });
+  }
+});
+
 // --- TALEP ROUTES ---
 app.post('/api/requests', memberAuthMiddleware, async (req, res) => {
   const { item, date, time, location, notes } = req.body;
@@ -362,6 +462,15 @@ app.get('/api/requests', authMiddleware, requirePermission('requestsView'), asyn
   res.json(list);
 });
 
+app.delete('/api/requests/:id', authMiddleware, adminOnly, async (req, res) => {
+  try {
+    await Request.findByIdAndDelete(req.params.id);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Talep silinemedi' });
+  }
+});
+
 // --- TALEP DURUMU GÜNCELLEME (ÇAKIŞMA VE 2 KADEMELİ ONAY) ---
 app.put('/api/requests/:id', authMiddleware, requirePermission('requestsManage'), async (req, res) => {
   const { status, force } = req.body;
@@ -371,11 +480,9 @@ app.put('/api/requests/:id', authMiddleware, requirePermission('requestsManage')
     const currentReq = await Request.findById(requestId);
     if (!currentReq) return res.status(404).json({ error: 'Talep bulunamadı' });
 
-    // Sadece 'Onaylandı' yapılırken çakışma kontrolü
     if (status === 'Onaylandı') {
       const itemsToCheck = Array.isArray(currentReq.item) ? currentReq.item : [currentReq.item];
 
-      // Aynı tarih ve saatte onaylanmış başka talep var mı?
       const conflictingRequest = await Request.findOne({
         _id: { $ne: requestId },
         status: 'Onaylandı',
@@ -384,7 +491,6 @@ app.put('/api/requests/:id', authMiddleware, requirePermission('requestsManage')
         item: { $in: itemsToCheck }
       });
 
-      // Çakışma var ve personel henüz zorlamadıysa uyar
       if (conflictingRequest && !force) {
         const conflictingItems = conflictingRequest.item.filter(it => itemsToCheck.includes(it));
         return res.status(409).json({
@@ -409,7 +515,6 @@ app.put('/api/requests/:id', authMiddleware, requirePermission('requestsManage')
 
     await currentReq.save();
 
-    // Onaylandıysa e-posta gönderimini tetikle (asenkron)
     if (status === 'Onaylandı') {
       sendApprovalEmail(currentReq, approverName);
     }
