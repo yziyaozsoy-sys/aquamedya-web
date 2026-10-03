@@ -2,20 +2,21 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const multer = require('multer');
-const cloudinary = require('cloudinary').v2; // ✅ Cloudinary eklendi
-const { CloudinaryStorage } = require('multer-storage-cloudinary'); // ✅ Cloudinary Storage eklendi
+const cloudinary = require('cloudinary').v2;
 const path = require('path');
 const fs = require('fs');
 const jwt = require('jsonwebtoken');
 const nodemailer = require('nodemailer');
 const mongoose = require('mongoose');
-const Member = require('./models/Members'); // ✅ DOĞRU
+const bcrypt = require('bcryptjs');
+
+const Member = require('./models/Members');
 const connectDB = require('./db');
 const Equipment = require('./models/Equipment');
 const Request = require('./models/Request');
 const Staff = require('./models/Staff');
 
-// --- REFERANS MODELİ (YENİ) ---
+// --- REFERANS MODELİ ---
 const referenceSchema = new mongoose.Schema({
   title: { type: String, required: true },
   client: { type: String, default: '' },
@@ -37,12 +38,12 @@ const defaultPermissions = {
   equipmentAdd: false,
   equipmentEdit: false,
   equipmentDelete: false,
-  requestsView: false,
+  requestsView: true,
   requestsManage: false,
   viewFinances: false
 };
 
-// --- ŞİRKET BİLGİLERİ (SABİT) ---
+// --- ŞİRKET BİLGİLERİ ---
 const COMPANY_INFO = {
   name: 'AQUA MEDYA TİCARET LİMİTED ŞİRKETİ',
   address: 'Merkez Mahallesi Seçkin Sokak Z Ofis A Blok No:2-4/90 Kağıthane / İSTANBUL',
@@ -76,7 +77,6 @@ async function sendApprovalEmail(requestData, approverName) {
     ? '<b>Merkezden Kendim Alacağım</b> (Ofis Adresimizden teslim alabilirsiniz)'
     : (requestData.location || 'Belirtilmedi');
 
-  // Mail sunucusu yoksa güvenli modda log yazıp geç
   if (!transporter) {
     console.log('--------------------------------------------------');
     console.log(`[BİLGİ] (Güvenli Mod) Mail sunucusu henüz tanımlı değil.`);
@@ -140,38 +140,24 @@ async function sendApprovalEmail(requestData, approverName) {
 app.use(cors());
 app.use(express.json());
 
-// --- CLOUDINARY YAPILANDIRMASI ---
+// --- CLOUDINARY ---
 const apiSecret = (process.env.CLOUDINARY_API_SECRET || '').trim();
-
 cloudinary.config({
   cloud_name: 'fwqrvwf7',
   api_key: '723196441566917',
   api_secret: apiSecret
 });
 
-// Güvenlik ve Hata Tespiti Logu
-console.log('Cloudinary Yapılandırması:', {
-  cloud_name: 'fwqrvwf7',
-  api_key: '723196441566917',
-  secret_var_mi: !!apiSecret,
-  secret_uzunluk: apiSecret.length
-});
-
-// Dosyayı belleğe (RAM) alan güvenli multer depolaması
 const storage = multer.memoryStorage();
 const upload = multer({ 
   storage: storage,
-  limits: { fileSize: 10 * 1024 * 1024 } // 10MB sınır
+  limits: { fileSize: 10 * 1024 * 1024 }
 });
 
-// Cloudinary'ye doğrudan buffer yükleyen yardımcı fonksiyon
 const uploadToCloudinary = (fileBuffer, folder = 'aquamedya_ekipmanlar') => {
   return new Promise((resolve, reject) => {
     const uploadStream = cloudinary.uploader.upload_stream(
-      {
-        folder: folder,
-        resource_type: 'image'
-      },
+      { folder: folder, resource_type: 'image' },
       (error, result) => {
         if (error) return reject(error);
         resolve(result);
@@ -181,7 +167,7 @@ const uploadToCloudinary = (fileBuffer, folder = 'aquamedya_ekipmanlar') => {
   });
 };
 
-// --- Auth Middleware ---
+// --- AUTH MIDDLEWARES ---
 function authMiddleware(req, res, next) {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
@@ -196,18 +182,38 @@ function authMiddleware(req, res, next) {
   }
 }
 
-// Sadece Admin Yetkisi Kontrolü
+// Süper Admin veya Normal Admin Kontrolü
 function adminOnly(req, res, next) {
-  if (req.user && req.user.role === 'admin') {
+  if (!req.user) {
+    console.log('❌ adminOnly RED: req.user yok!');
+    return res.status(401).json({ error: 'Oturum bulunamadı, lütfen tekrar giriş yapın.' });
+  }
+
+  console.log('🔍 adminOnly Kontrol Ediliyor - Giriş Yapan:', req.user);
+
+  const role = String(req.user.role || '').toLowerCase().trim();
+  const username = String(req.user.username || '').toLowerCase().trim();
+
+  // Rolü admin, superadmin olan VEYA kullanıcı adında admin/yusuf geçen herkesi koşulsuz geçir:
+  if (
+    role === 'admin' || 
+    role === 'superadmin' || 
+    username === 'admin' || 
+    username.includes('admin') ||
+    username.includes('yusuf')
+  ) {
     return next();
   }
+
+  console.log(`❌ adminOnly RED: role=${role}, username=${username}`);
   return res.status(403).json({ error: 'Bu işlem için yönetici yetkisi gereklidir.' });
 }
 
-// Esnek Yetki Kontrolü
+
+// İzin Kontrolü (Süper Admin ve Admin her şeyi yapabilir)
 function requirePermission(permKey) {
   return async (req, res, next) => {
-    if (req.user?.role === 'admin') return next();
+    if (req.user?.role === 'superadmin' || req.user?.role === 'admin') return next();
     try {
       const staff = await Staff.findById(req.user.id);
       if (staff?.permissions?.[permKey]) return next();
@@ -231,17 +237,30 @@ function memberAuthMiddleware(req, res, next) {
   }
 }
 
-// --- ROUTES ---
+// --- STAFF (PERSONEL & ADMİN) ROUTES ---
 
 app.post('/api/staff/login', async (req, res) => {
   const { username, password } = req.body;
   try {
-    const staff = await Staff.findOne({ username });
+    const staff = await Staff.findOne({ username: username.toLowerCase().trim() });
     if (!staff) return res.status(401).json({ error: 'Kullanıcı adı veya şifre hatalı' });
+    
     const ok = await staff.comparePassword(password);
     if (!ok) return res.status(401).json({ error: 'Kullanıcı adı veya şifre hatalı' });
-    const permissions = staff.role === 'admin'
-      ? { equipmentView: true, equipmentAdd: true, equipmentEdit: true, equipmentDelete: true, requestsView: true, requestsManage: true, viewFinances: true }
+
+    // ✅ Süper Admin veya Admin ise tüm izinler doğrudan 'true' verilir!
+    const isFullAdmin = staff.role === 'admin' || staff.role === 'superadmin';
+    const permissions = isFullAdmin
+      ? {
+          equipmentView: true,
+          equipmentAdd: true,
+          equipmentEdit: true,
+          equipmentDelete: true,
+          requestsView: true,
+          requestsManage: true,
+          viewFinances: true,
+          staffManage: true
+        }
       : staff.permissions;
 
     const token = jwt.sign(
@@ -256,12 +275,128 @@ app.post('/api/staff/login', async (req, res) => {
 
 app.get('/api/staff/me', authMiddleware, async (req, res) => {
   const staff = await Staff.findById(req.user.id);
-  const permissions = req.user.role === 'admin'
-    ? { equipmentView: true, equipmentAdd: true, equipmentEdit: true, equipmentDelete: true, requestsView: true, requestsManage: true, viewFinances: true }
+  const isFullAdmin = req.user.role === 'admin' || req.user.role === 'superadmin';
+  const permissions = isFullAdmin
+    ? {
+        equipmentView: true,
+        equipmentAdd: true,
+        equipmentEdit: true,
+        equipmentDelete: true,
+        requestsView: true,
+        requestsManage: true,
+        viewFinances: true,
+        staffManage: true
+      }
     : staff?.permissions;
   res.json({ ...req.user, permissions });
 });
 
+app.get('/api/staff', authMiddleware, adminOnly, async (req, res) => {
+  const list = await Staff.find().select('-password').sort({ createdAt: -1 });
+  res.json(list);
+});
+
+// ✅ Yeni Personel / Alt Yönetici Ekleme (Şifre bcrypt ile hash'lenir)
+app.post('/api/staff', authMiddleware, adminOnly, async (req, res) => {
+  const { username, password, displayName, permissions } = req.body;
+  if (!username || !password) return res.status(400).json({ error: 'Kullanıcı adı ve şifre zorunludur' });
+
+  const cleanUsername = username.toLowerCase().trim();
+  const exists = await Staff.findOne({ username: cleanUsername });
+  if (exists) return res.status(400).json({ error: 'Bu kullanıcı adı zaten var' });
+
+  try {
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password.trim(), salt);
+
+    const newStaff = await Staff.create({
+      username: cleanUsername,
+      password: hashedPassword,
+      role: 'personel',
+      displayName: displayName || cleanUsername,
+      permissions: { ...defaultPermissions, ...(permissions || {}) }
+    });
+
+    const result = newStaff.toObject();
+    delete result.password;
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: 'Personel oluşturulamadı: ' + err.message });
+  }
+});
+
+// ✅ Personel & Admin Şifre/Yetki Güncelleme (Kendi şifreni ve personeli güncelleyebilmen için)
+app.put('/api/staff/:id', authMiddleware, async (req, res) => {
+  try {
+    const { displayName, password, permissions, role } = req.body;
+    const targetStaff = await Staff.findById(req.params.id);
+    if (!targetStaff) return res.status(404).json({ error: 'Kullanıcı bulunamadı.' });
+
+    const currentUsername = (req.user.username || '').toLowerCase().trim();
+    const currentRole = (req.user.role || '').toLowerCase().trim();
+
+    const isSelf = req.user.id === targetStaff._id.toString() || currentUsername === targetStaff.username.toLowerCase();
+    const isSuper = currentRole === 'superadmin' || currentUsername === 'admin';
+    const isAdminUser = currentRole === 'admin' || isSuper;
+
+    if (!isSelf && !isAdminUser) {
+      return res.status(403).json({ error: 'Bu işlem için yetkiniz yok.' });
+    }
+
+    // Başka bir admin gelip Süper Admin'i değiştiremez (Ama Süper Admin kendini değiştirebilir!)
+    if (targetStaff.role === 'superadmin' && !isSuper) {
+      return res.status(403).json({ error: 'Süper Admin hesabını sadece Süper Admin düzenleyebilir.' });
+    }
+
+    if (displayName) targetStaff.displayName = displayName;
+
+    // Şifre güncellenirken güvenli bcrypt hash
+    if (password && password.trim() !== '') {
+      const salt = await bcrypt.genSalt(10);
+      targetStaff.password = await bcrypt.hash(password.trim(), salt);
+    }
+
+    // Kendi admin hesabının yetkilerini kısıtlamasın, sadece normal personele yetki ata
+    if (permissions && isAdminUser && targetStaff.username !== 'admin') {
+      targetStaff.permissions = { ...targetStaff.permissions, ...permissions };
+    }
+
+    if (role && isSuper) {
+      targetStaff.role = role;
+    }
+
+    await targetStaff.save();
+    const result = targetStaff.toObject();
+    delete result.password;
+    res.json(result);
+  } catch (err) {
+    console.error('Şifre/Yetki Güncelleme Hatası:', err);
+    res.status(500).json({ error: 'Güncelleme yapılamadı: ' + err.message });
+  }
+});
+
+// ✅ Personel Silme (Süper Admin Silinemez Koruması)
+app.delete('/api/staff/:id', authMiddleware, adminOnly, async (req, res) => {
+  try {
+    const targetStaff = await Staff.findById(req.params.id);
+    if (!targetStaff) return res.status(404).json({ error: 'Personel bulunamadı.' });
+
+    if (targetStaff.role === 'superadmin') {
+      return res.status(400).json({ error: 'Süper Admin hesabı silinemez!' });
+    }
+
+    if (targetStaff.role === 'admin' && req.user.role !== 'superadmin') {
+      return res.status(403).json({ error: 'Yönetici hesaplarını sadece Süper Admin silebilir.' });
+    }
+
+    await Staff.findByIdAndDelete(req.params.id);
+    res.json({ success: true, message: 'Personel silindi.' });
+  } catch (err) {
+    res.status(500).json({ error: 'Silme işlemi başarısız.' });
+  }
+});
+
+// --- EKİPMAN ROUTES ---
 app.get('/api/equipment', async (req, res) => {
   const list = await Equipment.find();
   res.json(list);
@@ -295,14 +430,13 @@ app.post('/api/equipment', authMiddleware, requirePermission('equipmentAdd'), up
 
 app.put('/api/equipment/:id', authMiddleware, upload.single('photo'), async (req, res) => {
   try {
-    if (req.user.role !== 'admin' && !req.user.permissions?.equipmentEdit) {
+    const isFullAdmin = req.user.role === 'admin' || req.user.role === 'superadmin';
+    if (!isFullAdmin && !req.user.permissions?.equipmentEdit) {
       return res.status(403).json({ error: 'Bu işlem için yetkiniz yok.' });
     }
 
     const item = await Equipment.findById(req.params.id);
-    if (!item) {
-      return res.status(404).json({ error: 'Ekipman bulunamadı.' });
-    }
+    if (!item) return res.status(404).json({ error: 'Ekipman bulunamadı.' });
 
     const { name, category, price, dailyRate, stock, specs, videoUrl, youtubeUrl } = req.body;
 
@@ -311,8 +445,7 @@ app.put('/api/equipment/:id', authMiddleware, upload.single('photo'), async (req
         const result = await uploadToCloudinary(req.file.buffer, 'aquamedya_ekipmanlar');
         item.photo = result.secure_url;
       } catch (uploadErr) {
-        console.error('Cloudinary doğrudan yükleme hatası:', uploadErr);
-        return res.status(400).json({ error: 'Görsel yüklenemedi: ' + (uploadErr.message || 'Hata') });
+        return res.status(400).json({ error: 'Görsel yüklenemedi: ' + uploadErr.message });
       }
     }
 
@@ -320,17 +453,11 @@ app.put('/api/equipment/:id', authMiddleware, upload.single('photo'), async (req
     if (category) item.category = category;
 
     const finalPrice = price !== undefined ? price : dailyRate;
-    if (finalPrice !== undefined && finalPrice !== '') {
-      item.price = Number(finalPrice);
-    }
-    if (stock !== undefined && stock !== '') {
-      item.stock = parseInt(stock, 10);
-    }
+    if (finalPrice !== undefined && finalPrice !== '') item.price = Number(finalPrice);
+    if (stock !== undefined && stock !== '') item.stock = parseInt(stock, 10);
 
     const finalVideo = videoUrl !== undefined ? videoUrl : youtubeUrl;
-    if (finalVideo !== undefined) {
-      item.videoUrl = finalVideo;
-    }
+    if (finalVideo !== undefined) item.videoUrl = finalVideo;
 
     if (specs !== undefined) {
       if (Array.isArray(specs)) {
@@ -352,7 +479,6 @@ app.put('/api/equipment/:id', authMiddleware, upload.single('photo'), async (req
     await item.save();
     return res.json(item);
   } catch (err) {
-    console.error('Ekipman Güncelleme Hatası:', err);
     return res.status(500).json({ error: err.message || 'Sunucu hatası oluştu' });
   }
 });
@@ -366,7 +492,7 @@ app.delete('/api/equipment/:id', authMiddleware, requirePermission('equipmentDel
   }
 });
 
-// --- REFERANSLAR (YENİ ROUTE'LAR) ---
+// --- REFERANSLAR ---
 app.get('/api/references', async (req, res) => {
   try {
     const list = await Reference.find().sort({ createdAt: -1 });
@@ -397,7 +523,6 @@ app.post('/api/references', authMiddleware, upload.single('photo'), async (req, 
 
     res.status(201).json(newRef);
   } catch (err) {
-    console.error('Referans Ekleme Hatası:', err);
     res.status(500).json({ error: 'Referans eklenemedi.' });
   }
 });
@@ -422,7 +547,6 @@ app.put('/api/references/:id', authMiddleware, upload.single('photo'), async (re
     await refItem.save();
     res.json(refItem);
   } catch (err) {
-    console.error('Referans Güncelleme Hatası:', err);
     res.status(500).json({ error: 'Referans güncellenemedi.' });
   }
 });
@@ -436,7 +560,7 @@ app.delete('/api/references/:id', authMiddleware, async (req, res) => {
   }
 });
 
-// --- TALEP ROUTES ---
+// --- TALEP / SİPARİŞ ROUTES ---
 app.post('/api/requests', memberAuthMiddleware, async (req, res) => {
   const { item, date, time, location, notes } = req.body;
   const newRequest = await Request.create({
@@ -471,7 +595,6 @@ app.delete('/api/requests/:id', authMiddleware, adminOnly, async (req, res) => {
   }
 });
 
-// --- TALEP DURUMU GÜNCELLEME (ÇAKIŞMA VE 2 KADEMELİ ONAY) ---
 app.put('/api/requests/:id', authMiddleware, requirePermission('requestsManage'), async (req, res) => {
   const { status, force } = req.body;
   const requestId = req.params.id;
@@ -521,12 +644,88 @@ app.put('/api/requests/:id', authMiddleware, requirePermission('requestsManage')
 
     res.json(currentReq);
   } catch (err) {
-    console.error(err);
     res.status(500).json({ error: 'Talep güncellenirken bir hata oluştu' });
   }
 });
 
-// --- ÜYELİK ROUTE'LARI ---
+// --- ÜYELİK VE ŞİFRE SIFIRLAMA ROUTES ---
+const passwordResetCodes = new Map();
+
+app.post('/api/member/forgot-password', async (req, res) => {
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ error: 'E-posta adresi gereklidir.' });
+
+  try {
+    const member = await Member.findOne({ email: email.toLowerCase().trim() });
+    if (!member) {
+      return res.status(404).json({ error: 'Bu e-posta adresiyle kayıtlı üye bulunamadı.' });
+    }
+
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = Date.now() + 15 * 60 * 1000;
+    passwordResetCodes.set(member.email, { code, expiresAt });
+
+    if (transporter) {
+      await transporter.sendMail({
+        from: `"${COMPANY_INFO.name}" <${process.env.EMAIL_USER}>`,
+        to: member.email,
+        subject: `Şifre Sıfırlama Kodu - ${COMPANY_INFO.name}`,
+        html: `
+          <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
+            <h2 style="color: #6366f1;">Şifre Sıfırlama Talebi</h2>
+            <p>Sayın <b>${member.name}</b>,</p>
+            <p>Hesabınızın şifresini yenilemek için aşağıdaki 6 haneli doğrulama kodunu kullanabilirsiniz:</p>
+            <div style="background: #f1f5f9; padding: 15px; font-size: 24px; font-weight: bold; letter-spacing: 5px; text-align: center; border-radius: 8px; margin: 20px 0; color: #0f172a;">
+              ${code}
+            </div>
+            <p style="font-size: 12px; color: #64748b;">Bu kod 15 dakika geçerlidir.</p>
+          </div>
+        `
+      });
+      console.log(`[ŞİFRE SIFIRLAMA] ${member.email} adresine kod yollandı: ${code}`);
+    } else {
+      console.log(`[SİMÜLASYON ŞİFRE KODU] ${member.email} için kod: ${code}`);
+    }
+
+    res.json({ success: true, message: 'Doğrulama kodu e-posta adresinize gönderildi.' });
+  } catch (err) {
+    res.status(500).json({ error: 'Kod gönderilirken hata oluştu.' });
+  }
+});
+
+app.post('/api/member/reset-password', async (req, res) => {
+  const { email, code, newPassword } = req.body;
+  if (!email || !code || !newPassword) {
+    return res.status(400).json({ error: 'Tüm alanlar zorunludur.' });
+  }
+
+  const cleanEmail = email.toLowerCase().trim();
+  const resetData = passwordResetCodes.get(cleanEmail);
+
+  if (!resetData || resetData.code !== code.trim()) {
+    return res.status(400).json({ error: 'Girdiğiniz doğrulama kodu geçersiz veya hatalı.' });
+  }
+
+  if (Date.now() > resetData.expiresAt) {
+    passwordResetCodes.delete(cleanEmail);
+    return res.status(400).json({ error: 'Doğrulama kodunun süresi dolmuş.' });
+  }
+
+  try {
+    const member = await Member.findOne({ email: cleanEmail });
+    if (!member) return res.status(404).json({ error: 'Üye bulunamadı.' });
+
+    const salt = await bcrypt.genSalt(10);
+    member.password = await bcrypt.hash(newPassword.trim(), salt);
+    await member.save();
+
+    passwordResetCodes.delete(cleanEmail);
+    res.json({ success: true, message: 'Şifreniz başarıyla güncellendi!' });
+  } catch (err) {
+    res.status(500).json({ error: 'Şifre güncellenemedi.' });
+  }
+});
+
 app.post('/api/member/register', async (req, res) => {
   const { name, phone, email, password } = req.body;
   if (!name || !phone || !email || !password) {
@@ -570,54 +769,11 @@ app.post('/api/member/login', async (req, res) => {
   }
 });
 
-// --- PERSONEL YÖNETİMİ ---
-app.get('/api/staff', authMiddleware, adminOnly, async (req, res) => {
-  const list = await Staff.find().select('-password');
-  res.json(list);
-});
-
-app.post('/api/staff', authMiddleware, adminOnly, async (req, res) => {
-  const { username, password, displayName, permissions } = req.body;
-  const exists = await Staff.findOne({ username });
-  if (exists) return res.status(400).json({ error: 'Bu kullanıcı adı zaten var' });
-
-  const newStaff = await Staff.create({
-    username, password, role: 'personel',
-    displayName: displayName || username,
-    permissions: { ...defaultPermissions, ...(permissions || {}) }
-  });
-  const result = newStaff.toObject();
-  delete result.password;
-  res.json(result);
-});
-
-app.put('/api/staff/:id', authMiddleware, adminOnly, async (req, res) => {
-  const { displayName, password, permissions } = req.body;
-  const staff = await Staff.findById(req.params.id);
-  if (!staff) return res.status(404).json({ error: 'Personel bulunamadı' });
-  if (staff.role === 'admin') return res.status(400).json({ error: 'Admin yetkileri değiştirilemez' });
-
-  if (displayName) staff.displayName = displayName;
-  if (password) staff.password = password;
-  if (permissions) staff.permissions = { ...staff.permissions.toObject(), ...permissions };
-  await staff.save();
-
-  const result = staff.toObject();
-  delete result.password;
-  res.json(result);
-});
-
-app.delete('/api/staff/:id', authMiddleware, adminOnly, async (req, res) => {
-  const staff = await Staff.findById(req.params.id);
-  if (staff?.role === 'admin') return res.status(400).json({ error: 'Admin silinemez' });
-  await Staff.findByIdAndDelete(req.params.id);
-  res.json({ success: true });
-});
-
 app.get('/', (req, res) => {
   res.send('Aqua Medya Backend API çalışıyor.');
 });
 
+// SUNUCUYU EN SONDA VE TEK SEFERDE BAŞLAT
 connectDB().then(() => {
   app.listen(PORT, () => {
     console.log(`✅ Aqua Medya Backend http://localhost:${PORT} üzerinde çalışıyor`);

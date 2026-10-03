@@ -4,7 +4,7 @@ import {
   Camera, Calendar, MapPin, Clock, User, Package, Bell, CheckCircle, 
   Phone, Mail, Building2, Video, Mic, Lightbulb, Move3d, ScreenShare, Star, 
   Upload, Trash2, Edit2, Plus, X, Shield, Users, LogOut, AlertTriangle, 
-  FileText, AlertCircle, Check, Sparkles, Film, Cookie, Info, Award, Play
+  FileText, AlertCircle, Check, Sparkles, Film, Cookie, Info, Award, Play, KeyRound
 } from 'lucide-react';
 import { generateRentalPDF } from './generateRentalContract';
 
@@ -46,7 +46,7 @@ const emptyPermissions = {
 };
 
 function App() {
-  const [activeTab, setActiveTab] = useState('home'); // 'home' | 'catalog' | 'references' | 'rental' | 'login' | 'staff' | 'staffLogin'
+  const [activeTab, setActiveTab] = useState('home'); // 'home' | 'catalog' | 'references' | 'rental' | 'login' | 'staff' | 'staffLogin' | 'myRequests'
   const [activeVideoModal, setActiveVideoModal] = useState(null);
 
   // KVKK, Çerez & Hakkımızda Modalları
@@ -74,6 +74,7 @@ function App() {
   const [newRef, setNewRef] = useState(emptyRefForm);
   const [editingRefId, setEditingRefId] = useState(null);
 
+  // Üyelik State
   const [memberToken, setMemberToken] = useState(localStorage.getItem('member_token') || '');
   const [memberName, setMemberName] = useState(localStorage.getItem('member_name') || '');
   const [memberPhone, setMemberPhone] = useState(localStorage.getItem('member_phone') || '');
@@ -85,6 +86,16 @@ function App() {
   const [myRequestsLoading, setMyRequestsLoading] = useState(false);
   const [activeCatalogCategory, setActiveCatalogCategory] = useState('Tümü');
 
+  // Şifremi Unuttum State
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [forgotStep, setForgotStep] = useState(1); // 1: Email gir, 2: Kod ve Yeni Şifre
+  const [resetEmail, setResetEmail] = useState('');
+  const [resetCode, setResetCode] = useState('');
+  const [newResetPassword, setNewResetPassword] = useState('');
+  const [resetMsg, setResetMsg] = useState({ error: '', success: '' });
+  const [resetLoading, setResetLoading] = useState(false);
+
+  // Personel / Admin State
   const [staffToken, setStaffToken] = useState(localStorage.getItem('staff_token') || '');
   const [staffRole, setStaffRole] = useState(localStorage.getItem('staff_role') || '');
   const [staffDisplayName, setStaffDisplayName] = useState(localStorage.getItem('staff_displayName') || '');
@@ -98,6 +109,15 @@ function App() {
   const [requests, setRequests] = useState([]);
   const [equipmentCatalog, setEquipmentCatalog] = useState([]);
   const [requestPeriod, setRequestPeriod] = useState('all');
+
+  // ✅ KRİTİK DÜZELTME: Süper Admin de tam yetkili Admindir!
+  const isStaffLoggedIn = !!staffToken;
+  const isAdmin = staffRole === 'admin' || staffRole === 'superadmin';
+
+  const authHeader = { headers: { Authorization: 'Bearer ' + staffToken } };
+  const memberAuthHeader = { headers: { Authorization: 'Bearer ' + memberToken } };
+
+  const can = (permKey) => isAdmin || !!(staffPermissions && staffPermissions[permKey]);
 
   const deleteRequest = async (requestId) => {
     if (!window.confirm("Bu kiralama talebini silmek istediğinize emin misiniz?")) return;
@@ -141,12 +161,6 @@ function App() {
   const [editingStaffId, setEditingStaffId] = useState(null);
   const [staffFormError, setStaffFormError] = useState('');
 
-  const isStaffLoggedIn = !!staffToken;
-  const isAdmin = staffRole === 'admin';
-
-  const authHeader = { headers: { Authorization: 'Bearer ' + staffToken } };
-  const memberAuthHeader = { headers: { Authorization: 'Bearer ' + memberToken } };
-
   const fetchReferences = async () => {
     try {
       const res = await axios.get(API_URL + '/api/references');
@@ -168,8 +182,6 @@ function App() {
     }
   };
 
-  const can = (permKey) => isAdmin || !!(staffPermissions && staffPermissions[permKey]);
-
   const fetchEquipment = async () => {
     try {
       const res = await axios.get(API_URL + '/api/equipment');
@@ -185,12 +197,22 @@ function App() {
     } catch (e) { console.error('Talepler alınamadı', e); }
   };
 
-  const fetchStaffList = async () => {
-    if (!isAdmin) return;
+    const fetchStaffList = async () => {
     try {
-      const res = await axios.get(API_URL + '/api/staff', authHeader);
+      const token = localStorage.getItem('staff_token') || staffToken;
+      if (!token) {
+        console.warn('Oturum tokenı bulunamadı');
+        return;
+      }
+      const res = await axios.get(API_URL + '/api/staff', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
       setStaffList(res.data);
-    } catch (e) { console.error('Personel listesi alınamadı', e); }
+      setStaffFormError(''); // ✅ Başarılı olunca o kırmızı hatayı silsin!
+    } catch (e) {
+      console.error('Personel listesi hatası:', e.response?.data || e.message);
+      setStaffFormError(e.response?.data?.error || 'Personel listesi alınamadı.');
+    }
   };
 
   useEffect(() => { 
@@ -205,7 +227,9 @@ function App() {
     return () => clearInterval(interval);
   }, [staffToken]);
 
-  useEffect(() => { if (staffSubTab === 'management') fetchStaffList(); }, [staffSubTab]);
+  useEffect(() => { 
+    if (staffSubTab === 'management') fetchStaffList(); 
+  }, [staffSubTab, staffRole]);
 
   const handleMemberAuth = async (e) => {
     e.preventDefault();
@@ -237,6 +261,49 @@ function App() {
     setMemberName('');
     setMemberPhone('');
     setActiveTab('home');
+  };
+
+  // Şifremi Unuttum Fonksiyonları
+  const handleRequestResetCode = async (e) => {
+    e.preventDefault();
+    setResetMsg({ error: '', success: '' });
+    setResetLoading(true);
+    try {
+      const res = await axios.post(`${API_URL}/api/member/forgot-password`, { email: resetEmail });
+      setResetMsg({ error: '', success: res.data.message || 'Doğrulama kodu e-postanıza iletildi.' });
+      setForgotStep(2);
+    } catch (err) {
+      setResetMsg({ error: err.response?.data?.error || 'Kod gönderilemedi.', success: '' });
+    } finally {
+      setResetLoading(false);
+    }
+  };
+
+  const handleConfirmResetPassword = async (e) => {
+    e.preventDefault();
+    setResetMsg({ error: '', success: '' });
+    setResetLoading(true);
+    try {
+      const res = await axios.post(`${API_URL}/api/member/reset-password`, {
+        email: resetEmail,
+        code: resetCode,
+        newPassword: newResetPassword
+      });
+      setResetMsg({ error: '', success: res.data.message || 'Şifreniz başarıyla güncellendi!' });
+      setTimeout(() => {
+        setShowForgotPassword(false);
+        setForgotStep(1);
+        setResetEmail('');
+        setResetCode('');
+        setNewResetPassword('');
+        setResetMsg({ error: '', success: '' });
+        setActiveTab('login');
+      }, 2000);
+    } catch (err) {
+      setResetMsg({ error: err.response?.data?.error || 'Şifre güncellenemedi.', success: '' });
+    } finally {
+      setResetLoading(false);
+    }
   };
 
   const handleStaffLogin = async (e) => {
@@ -416,7 +483,7 @@ function App() {
     setCustomCategory('');
   };
 
-  // --- REFERANS İŞLEMLERİ ---
+  // REFERANS İŞLEMLERİ
   const handleRefPhotoChange = (e) => {
     const file = e.target.files[0];
     if (file) {
@@ -485,17 +552,24 @@ function App() {
     setNewStaff(prev => ({ ...prev, permissions: { ...prev.permissions, [key]: !prev.permissions[key] } }));
   };
 
-  const handleAddOrUpdateStaff = async (e) => {
+   const handleAddOrUpdateStaff = async (e) => {
     e.preventDefault();
     setStaffFormError('');
     try {
+      const token = localStorage.getItem('staff_token') || staffToken;
+      const currentAuth = {
+        headers: { Authorization: `Bearer ${token}` }
+      };
+
       if (editingStaffId) {
         const payload = { displayName: newStaff.displayName, permissions: newStaff.permissions };
-        if (newStaff.password) payload.password = newStaff.password;
-        await axios.put(API_URL + '/api/staff/' + editingStaffId, payload, authHeader);
+        if (newStaff.password && newStaff.password.trim() !== '') {
+          payload.password = newStaff.password.trim();
+        }
+        await axios.put(API_URL + '/api/staff/' + editingStaffId, payload, currentAuth);
         setEditingStaffId(null);
       } else {
-        await axios.post(API_URL + '/api/staff', newStaff, authHeader);
+        await axios.post(API_URL + '/api/staff', newStaff, currentAuth);
       }
       setNewStaff(emptyNewStaff);
       fetchStaffList();
@@ -508,7 +582,7 @@ function App() {
     setEditingStaffId(s._id || s.id);
     setNewStaff({
       username: s.username,
-      password: '',
+      password: '', // Şifre değiştirilmek istenirse doldurulur
       displayName: s.displayName || '',
       permissions: Object.assign({}, emptyPermissions, s.permissions || {})
     });
@@ -519,7 +593,7 @@ function App() {
     try {
       await axios.delete(API_URL + '/api/staff/' + id, authHeader);
       fetchStaffList();
-    } catch (e) { alert('Silme başarısız.'); }
+    } catch (e) { alert('Silme başarısız: ' + (e.response?.data?.error || 'Yetkiniz yok')); }
   };
 
   const cancelStaffEdit = () => { setEditingStaffId(null); setNewStaff(emptyNewStaff); setStaffFormError(''); };
@@ -1047,14 +1121,14 @@ function App() {
                             >
                               <svg className="w-3.5 h-3.5 fill-current text-rose-500 shrink-0" viewBox="0 0 24 24">
                                 <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
-                                </svg>
-                                Tanıtım Videosunu İzle
-                              </button>
-                            )}
+                              </svg>
+                              Tanıtım Videosunu İzle
+                            </button>
+                          )}
 
-                            <div className="flex items-center justify-between">
-                              <div>
-                                <span className="text-[10px] uppercase tracking-wider text-slate-400 block font-semibold">Günlük Kiralama</span>
+                          <div className="flex items-center justify-between">
+                            <div>
+                                                          <span className="text-[10px] uppercase tracking-wider text-slate-400 block font-semibold">Günlük Kiralama</span>
                                 <span className="font-black text-white text-lg bg-gradient-to-r from-white to-cyan-200 bg-clip-text text-transparent">
                                   {formatEquipmentPrice(eq)} ₺
                                 </span>
@@ -1138,7 +1212,18 @@ function App() {
                         </div>
                       )}
                       <div>
-                        <label className="text-xs font-semibold text-slate-300">Şifre</label>
+                        <div className="flex justify-between items-center">
+                          <label className="text-xs font-semibold text-slate-300">Şifre</label>
+                          {memberMode === 'login' && (
+                            <button
+                              type="button"
+                              onClick={() => { setShowForgotPassword(true); setForgotStep(1); setResetMsg({ error: '', success: '' }); }}
+                              className="text-[11px] text-cyan-400 hover:underline"
+                            >
+                              Şifremi Unuttum?
+                            </button>
+                          )}
+                        </div>
                         <input type="password" required value={memberForm.password} onChange={(e) => setMemberForm({...memberForm, password: e.target.value})} className="w-full mt-1 px-4 py-2.5 bg-slate-950 border border-slate-800 text-white rounded-xl focus:border-purple-500 outline-none text-sm" placeholder="••••••••" />
                       </div>
                       {memberError && <p className="text-rose-400 text-xs font-medium">{memberError}</p>}
@@ -1351,7 +1436,9 @@ function App() {
                     <div className="p-3 bg-purple-950/60 border border-purple-500/30 text-purple-300 rounded-2xl"><Shield size={24} /></div>
                     <div>
                       <h2 className="text-xl font-bold text-white">Aqua Medya Yönetim Portalı</h2>
-                      <p className="text-xs text-slate-400">Yetkili: <b className="text-purple-300">{staffDisplayName || staffRole}</b> {isAdmin && <span className="text-cyan-400 font-bold">(Admin)</span>}</p>
+                      <p className="text-xs text-slate-400">
+                        Yetkili: <b className="text-purple-300">{staffDisplayName || staffRole}</b> {isAdmin && <span className="text-cyan-400 font-bold">({staffRole === 'superadmin' ? 'Süper Admin' : 'Admin'})</span>}
+                      </p>
                     </div>
                   </div>
                   <button onClick={handleStaffLogout} className="flex items-center gap-1.5 bg-slate-900 border border-slate-700 text-rose-400 font-semibold px-4 py-2 rounded-xl hover:bg-rose-950/30 transition text-xs"><LogOut size={15}/> Güvenli Çıkış</button>
@@ -1373,9 +1460,10 @@ function App() {
                     </button>
                   )}
 
+                  {/* ✅ SÜPER ADMİN & ADMİN İÇİN PERSONEL YÖNETİMİ BUTONU */}
                   {isAdmin && (
                     <button onClick={() => setStaffSubTab('management')} className={"px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 " + (staffSubTab === 'management' ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-md' : 'text-slate-400 hover:text-white')}>
-                      <Users size={14}/> Personel Yönetimi
+                      <Users size={14}/> Personel & Yetki Yönetimi
                     </button>
                   )}
                 </div>
@@ -1613,7 +1701,7 @@ function App() {
                   </div>
                 )}
 
-                {/* PERSONEL: REFERANS YÖNETİMİ SEKMESİ (YENİ!) */}
+                {/* PERSONEL: REFERANS YÖNETİMİ SEKMESİ */}
                 {staffSubTab === 'references' && (
                   <div className="grid md:grid-cols-2 gap-6">
                     <div className="bg-[#0b0f19] rounded-3xl shadow-xl border border-purple-900/30 p-6">
@@ -1918,13 +2006,13 @@ function App() {
                   </div>
                 )}
 
-                {/* PERSONEL: PERSONEL YÖNETİMİ SEKMESİ */}
+                {/* PERSONEL: PERSONEL YÖNETİMİ SEKMESİ (SÜPER ADMİN & ADMİN) */}
                 {staffSubTab === 'management' && isAdmin && (
                   <div className="grid md:grid-cols-2 gap-6">
                     <div className="bg-[#0b0f19] rounded-3xl shadow-xl border border-purple-900/30 p-6">
                       <h3 className="font-bold text-lg mb-4 flex items-center gap-2 text-white">
                         {editingStaffId ? <Edit2 size={18} className="text-cyan-400" /> : <Plus size={18} className="text-purple-400" />} 
-                        {editingStaffId ? 'Personel Yetkilerini Düzenle' : 'Yeni Personel Tanımla'}
+                        {editingStaffId ? 'Personel & Şifre Bilgilerini Düzenle' : 'Yeni Personel Tanımla'}
                       </h3>
                       <form onSubmit={handleAddOrUpdateStaff} className="space-y-3">
                         <div>
@@ -1936,67 +2024,77 @@ function App() {
                           <input type="text" value={newStaff.displayName} onChange={(e) => setNewStaff({...newStaff, displayName: e.target.value})} placeholder="Örn: Yusuf Sarser" className="w-full mt-1 px-4 py-2 bg-slate-950 border border-slate-800 text-white rounded-xl focus:border-purple-500 outline-none text-sm" />
                         </div>
                         <div>
-                          <label className="text-xs font-bold text-slate-300">{editingStaffId ? "Yeni Şifre (Boş bırakırsanız değişmez)" : "Giriş Şifresi"}</label>
-                        <input type="password" required={!editingStaffId} value={newStaff.password} onChange={(e) => setNewStaff({...newStaff, password: e.target.value})} placeholder="••••••••" className="w-full mt-1 px-4 py-2 bg-slate-950 border border-slate-800 text-white rounded-xl focus:border-purple-500 outline-none text-sm" />
-                      </div>
-
-                      <div className="border border-slate-800 rounded-2xl p-4 bg-slate-950/80">
-                        <p className="text-xs font-bold text-purple-300 mb-3 uppercase tracking-wider">Personel Yetki İzinleri</p>
-                        <div className="space-y-2">
-                          {Object.keys(permissionLabels).map((key) => (
-                            <label key={key} className="flex items-center gap-2 text-xs font-medium text-slate-300 cursor-pointer">
-                              <input type="checkbox" checked={!!newStaff.permissions[key]} onChange={() => togglePermission(key)} className="w-4 h-4 rounded text-purple-600 focus:ring-purple-500 bg-slate-900 border-slate-700" />
-                              {permissionLabels[key]}
-                            </label>
-                          ))}
+                          <label className="text-xs font-bold text-slate-300">
+                            {editingStaffId ? "Yeni Şifre (Boş bırakırsanız mevcut şifre korunur)" : "Giriş Şifresi"}
+                          </label>
+                          <input 
+                            type="password" 
+                            required={!editingStaffId} 
+                            value={newStaff.password} 
+                            onChange={(e) => setNewStaff({...newStaff, password: e.target.value})} 
+                            placeholder="••••••••" 
+                            className="w-full mt-1 px-4 py-2 bg-slate-950 border border-slate-800 text-white rounded-xl focus:border-purple-500 outline-none text-sm" 
+                          />
                         </div>
-                      </div>
 
-                      {staffFormError && <p className="text-rose-400 text-xs font-semibold">{staffFormError}</p>}
-                      <div className="flex gap-2 pt-2">
-                        <button type="submit" className="flex-1 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 text-white font-bold py-2.5 rounded-xl hover:opacity-90 transition text-sm shadow-md">
-                          {editingStaffId ? 'Yetkileri Güncelle' : 'Personeli Kaydet'}
-                        </button>
-                        {editingStaffId && (
-                          <button type="button" onClick={cancelStaffEdit} className="px-4 bg-slate-900 border border-slate-700 text-slate-300 font-medium rounded-xl hover:bg-slate-800 transition text-sm">
-                            Vazgeç
-                          </button>
-                        )}
-                      </div>
-                    </form>
-                  </div>
-
-                  <div className="bg-[#0b0f19] rounded-3xl shadow-xl border border-purple-900/30 p-6">
-                    <h3 className="font-bold text-lg mb-4 flex items-center gap-2 text-white">
-                      <Users size={18} className="text-cyan-400" /> Tanımlı Personeller ({staffList.length})
-                    </h3>
-                    <div className="space-y-3 max-h-[480px] overflow-y-auto pr-1">
-                      {staffList.map((s) => (
-                        <div key={s._id || s.id} className="flex items-center justify-between border border-slate-800 rounded-2xl p-3.5 bg-[#080b14] hover:border-purple-500/30 transition">
-                          <div>
-                            <p className="font-bold text-white text-sm flex items-center gap-2">
-                              {s.displayName || s.username}
-                              {s.role === 'admin' && <span className="text-[10px] bg-purple-950 text-cyan-300 border border-purple-500/40 font-bold px-2 py-0.5 rounded-full">Admin</span>}
-                            </p>
-                            <p className="text-xs text-slate-400">@{s.username}</p>
+                        <div className="border border-slate-800 rounded-2xl p-4 bg-slate-950/80">
+                          <p className="text-xs font-bold text-purple-300 mb-3 uppercase tracking-wider">Personel Yetki İzinleri</p>
+                          <div className="space-y-2">
+                            {Object.keys(permissionLabels).map((key) => (
+                              <label key={key} className="flex items-center gap-2 text-xs font-medium text-slate-300 cursor-pointer">
+                                <input type="checkbox" checked={!!newStaff.permissions[key]} onChange={() => togglePermission(key)} className="w-4 h-4 rounded text-purple-600 focus:ring-purple-500 bg-slate-900 border-slate-700" />
+                                {permissionLabels[key]}
+                              </label>
+                            ))}
                           </div>
-                          {s.role !== 'admin' && (
-                            <div className="flex gap-1.5">
-                              <button onClick={() => handleEditStaff(s)} className="p-2 bg-slate-900 text-cyan-400 border border-slate-800 rounded-xl hover:bg-slate-800 transition" title="Düzenle"><Edit2 size={14} /></button>
-                              <button onClick={() => handleDeleteStaff(s._id || s.id)} className="p-2 bg-slate-900 text-rose-400 border border-slate-800 rounded-xl hover:bg-rose-950/40 transition" title="Sil"><Trash2 size={14} /></button>
-                            </div>
+                        </div>
+
+                        {staffFormError && <p className="text-rose-400 text-xs font-semibold">{staffFormError}</p>}
+                        <div className="flex gap-2 pt-2">
+                          <button type="submit" className="flex-1 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 text-white font-bold py-2.5 rounded-xl hover:opacity-90 transition text-sm shadow-md">
+                            {editingStaffId ? 'Değişiklikleri Kaydet' : 'Personeli Kaydet'}
+                          </button>
+                          {editingStaffId && (
+                            <button type="button" onClick={cancelStaffEdit} className="px-4 bg-slate-900 border border-slate-700 text-slate-300 font-medium rounded-xl hover:bg-slate-800 transition text-sm">
+                              Vazgeç
+                            </button>
                           )}
                         </div>
-                      ))}
-                      {staffList.length === 0 && (
-                        <p className="text-slate-500 text-sm text-center py-10">Kayıtlı personel bulunmuyor.</p>
-                      )}
+                      </form>
+                    </div>
+
+                    <div className="bg-[#0b0f19] rounded-3xl shadow-xl border border-purple-900/30 p-6">
+                      <h3 className="font-bold text-lg mb-4 flex items-center gap-2 text-white">
+                        <Users size={18} className="text-cyan-400" /> Tanımlı Personeller & Yöneticiler ({staffList.length})
+                      </h3>
+                      <div className="space-y-3 max-h-[480px] overflow-y-auto pr-1">
+                        {staffList.map((s) => (
+                          <div key={s._id || s.id} className="flex items-center justify-between border border-slate-800 rounded-2xl p-3.5 bg-[#080b14] hover:border-purple-500/30 transition">
+                            <div>
+                              <p className="font-bold text-white text-sm flex items-center gap-2">
+                                {s.displayName || s.username}
+                                {s.role === 'superadmin' && <span className="text-[10px] bg-amber-950 text-amber-300 border border-amber-500/40 font-bold px-2 py-0.5 rounded-full">Süper Admin</span>}
+                                {s.role === 'admin' && <span className="text-[10px] bg-purple-950 text-cyan-300 border border-purple-500/40 font-bold px-2 py-0.5 rounded-full">Admin</span>}
+                              </p>
+                              <p className="text-xs text-slate-400">@{s.username}</p>
+                            </div>
+                            <div className="flex gap-1.5">
+                              <button onClick={() => handleEditStaff(s)} className="p-2 bg-slate-900 text-cyan-400 border border-slate-800 rounded-xl hover:bg-slate-800 transition" title="Şifre / Bilgi Düzenle"><Edit2 size={14} /></button>
+                              {s.role !== 'superadmin' && (
+                                <button onClick={() => handleDeleteStaff(s._id || s.id)} className="p-2 bg-slate-900 text-rose-400 border border-slate-800 rounded-xl hover:bg-rose-950/40 transition" title="Sil"><Trash2 size={14} /></button>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                        {staffList.length === 0 && (
+                          <p className="text-slate-500 text-sm text-center py-10">Kayıtlı personel bulunmuyor.</p>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
-              )}
-            </div>
-          )}
+                )}
+              </div>
+            )}
         </main>
       </div>
 
@@ -2043,6 +2141,88 @@ function App() {
           </div>
         </div>
       </footer>
+
+      {/* ŞİFREMİ UNUTTUM MODALI (MÜŞTERİLER İÇİN) */}
+      {showForgotPassword && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-[#0b0f19] border border-purple-500/40 w-full max-w-md rounded-3xl p-6 shadow-2xl relative">
+            <button 
+              onClick={() => { setShowForgotPassword(false); setResetMsg({ error: '', success: '' }); }} 
+              className="absolute top-4 right-4 text-slate-400 hover:text-white"
+            >
+              ✕
+            </button>
+
+            <h3 className="text-lg font-bold text-white mb-2 flex items-center gap-2">
+              <KeyRound size={20} className="text-purple-400" /> Şifremi Sıfırla
+            </h3>
+            <p className="text-xs text-slate-400 mb-4">
+              {forgotStep === 1 
+                ? 'Kayıtlı e-posta adresinizi girin, size 6 haneli doğrulama kodu gönderelim.' 
+                : 'E-postanıza gelen doğrulama kodunu ve yeni şifrenizi girin.'}
+            </p>
+
+            {resetMsg.error && <p className="text-xs text-rose-400 mb-3 bg-rose-950/40 p-2.5 rounded-xl border border-rose-900/50">{resetMsg.error}</p>}
+            {resetMsg.success && <p className="text-xs text-emerald-400 mb-3 bg-emerald-950/40 p-2.5 rounded-xl border border-emerald-900/50">{resetMsg.success}</p>}
+
+            {forgotStep === 1 ? (
+              <form onSubmit={handleRequestResetCode} className="space-y-3">
+                <div>
+                  <label className="text-xs text-slate-300 font-medium">Kayıtlı E-Posta Adresiniz</label>
+                  <input 
+                    type="email" 
+                    required 
+                    value={resetEmail} 
+                    onChange={(e) => setResetEmail(e.target.value)} 
+                    placeholder="ornek@domain.com" 
+                    className="w-full mt-1 px-4 py-2.5 bg-slate-950 border border-slate-800 text-white rounded-xl focus:border-purple-500 outline-none text-sm" 
+                  />
+                </div>
+                <button 
+                  type="submit" 
+                  disabled={resetLoading}
+                  className="w-full py-2.5 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-bold rounded-xl text-xs hover:opacity-90 transition disabled:opacity-50"
+                >
+                  {resetLoading ? 'Kod Gönderiliyor...' : 'Doğrulama Kodu Gönder'}
+                </button>
+              </form>
+            ) : (
+              <form onSubmit={handleConfirmResetPassword} className="space-y-3">
+                <div>
+                  <label className="text-xs text-slate-300 font-medium">6 Haneli Doğrulama Kodu</label>
+                  <input 
+                    type="text" 
+                    required 
+                    maxLength={6}
+                    value={resetCode} 
+                    onChange={(e) => setResetCode(e.target.value)} 
+                    placeholder="123456" 
+                    className="w-full mt-1 px-4 py-2 bg-slate-950 border border-slate-800 text-white rounded-xl focus:border-purple-500 outline-none text-center font-bold tracking-widest text-lg" 
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-slate-300 font-medium">Yeni Şifreniz</label>
+                  <input 
+                    type="password" 
+                    required 
+                    value={newResetPassword} 
+                    onChange={(e) => setNewResetPassword(e.target.value)} 
+                    placeholder="••••••••" 
+                    className="w-full mt-1 px-4 py-2 bg-slate-950 border border-slate-800 text-white rounded-xl focus:border-purple-500 outline-none text-sm" 
+                  />
+                </div>
+                <button 
+                  type="submit" 
+                  disabled={resetLoading}
+                  className="w-full py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-bold rounded-xl text-xs hover:opacity-90 transition disabled:opacity-50 shadow-md"
+                >
+                  {resetLoading ? 'Güncelleniyor...' : 'Şifreyi Güncelle ve Tamamla'}
+                </button>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ÇEREZ ONAY BARI (COOKIE BANNER) */}
       {!cookieConsent && (

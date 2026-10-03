@@ -2,58 +2,57 @@ require('dotenv').config();
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 
-// MongoDB Bağlantısı (env dosyasındaki adrese bağlanır)
 const MONGO_URI = process.env.MONGO_URI || process.env.MONGODB_URI;
 
-// Staff Modeli Şeması
 const staffSchema = new mongoose.Schema({
   username: { type: String, required: true, unique: true },
   password: { type: String, required: true },
-  role: { type: String, default: 'admin' },
-  displayName: { type: String, default: 'Yönetici' },
+  role: { type: String, default: 'superadmin' },
+  displayName: { type: String, default: 'Yusuf Sarser (Süper Admin)' },
   permissions: { type: Object, default: {} }
 });
 
 const Staff = mongoose.models.Staff || mongoose.model('Staff', staffSchema);
 
-async function reset() {
+async function setSuperAdmin() {
   try {
-    if (!MONGO_URI) {
-      console.error("HATA: MONGO_URI .env dosyasında bulunamadı!");
-      process.exit(1);
-    }
-
-    console.log("MongoDB'ye bağlanılıyor...");
     await mongoose.connect(MONGO_URI);
-    console.log("Bağlantı başarılı!");
+    console.log("✅ MongoDB bağlantısı kuruldu.");
 
-    const newPassword = "admin"; // <--- İSTEDİĞİN ŞİFREYİ BURAYA YAZ (Örn: admin)
     const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(newPassword, salt);
+    const hashedPassword = await bcrypt.hash("admin", salt); // Mevcut giriş şifren admin
 
-    // Admin kullanıcısını güncelle veya yoksa oluştur
-    const result = await Staff.findOneAndUpdate(
-      { username: 'admin' },
+    const user = await Staff.findOneAndUpdate(
+      { username: "admin" },
       { 
-        username: 'admin',
+        username: "admin",
         password: hashedPassword,
-        role: 'admin',
-        displayName: 'Yusuf Sarser'
+        role: "superadmin", // <--- KESİN SÜPER ADMİN
+        displayName: "Yusuf Sarser (Süper Admin)",
+        permissions: {
+          equipmentView: true,
+          equipmentAdd: true,
+          equipmentEdit: true,
+          equipmentDelete: true,
+          requestsView: true,
+          requestsManage: true,
+          viewFinances: true,
+          staffManage: true
+        }
       },
       { upsert: true, new: true }
     );
 
-    console.log("-----------------------------------------");
-    console.log("✅ ADMİN ŞİFRESİ BAŞARIYLA SIFIRLANDI!");
-    console.log("Kullanıcı Adı: admin");
-    console.log("Yeni Şifre    : " + newPassword);
-    console.log("-----------------------------------------");
-
+    console.log("==================================================");
+    console.log("👑 TEBRİKLER! HESABIN 'superadmin' OLARAK GÜNCELLENDİ!");
+    console.log(`👤 Kullanıcı Adı : ${user.username}`);
+    console.log(`🎖️ Rol           : ${user.role}`);
+    console.log("==================================================");
     process.exit(0);
   } catch (err) {
-    console.error("HATA:", err.message);
+    console.error("Hata:", err.message);
     process.exit(1);
   }
 }
 
-reset();
+setSuperAdmin();
