@@ -237,16 +237,31 @@ function memberAuthMiddleware(req, res, next) {
   }
 }
 
-// --- STAFF (PERSONEL & ADMİN) ROUTES ---
+// ✅ Süper Admin veya Admin ise tüm izinler doğrudan 'true' verilir!
 
 app.post('/api/staff/login', async (req, res) => {
   const { username, password } = req.body;
   try {
-    const staff = await Staff.findOne({ username: username.toLowerCase().trim() });
-    if (!staff) return res.status(401).json({ error: 'Kullanıcı adı veya şifre hatalı' });
-    
-    const ok = await staff.comparePassword(password);
-    if (!ok) return res.status(401).json({ error: 'Kullanıcı adı veya şifre hatalı' });
+   if (typeof username !== 'string' || typeof password !== 'string' ||
+    !username.trim() || !password) {
+  return res.status(400).json({ error: 'Kullanıcı adı ve şifre zorunludur.' });
+}
+
+const staff = await Staff.findOne({
+  username: username.toLowerCase().trim()
+});
+
+if (!staff) {
+  console.warn('[STAFF LOGIN] Kullanıcı bulunamadı.');
+  return res.status(401).json({ error: 'Kullanıcı adı veya şifre hatalı' });
+}
+
+const ok = await staff.comparePassword(password);
+
+if (!ok) {
+  console.warn('[STAFF LOGIN] Şifre karşılaştırması başarısız.');
+  return res.status(401).json({ error: 'Kullanıcı adı veya şifre hatalı' });
+}
 
     // ✅ Süper Admin veya Admin ise tüm izinler doğrudan 'true' verilir!
     const isFullAdmin = staff.role === 'admin' || staff.role === 'superadmin';
@@ -269,6 +284,7 @@ app.post('/api/staff/login', async (req, res) => {
     );
     res.json({ token, role: staff.role, displayName: staff.displayName, permissions });
   } catch (err) {
+    console.error('[STAFF LOGIN] Sunucu hatası:', err.name);
     res.status(500).json({ error: 'Sunucu hatası' });
   }
 });
